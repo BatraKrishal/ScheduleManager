@@ -5,10 +5,16 @@ from app.schemas.validation import ValidationErrorDetail, ValidationResponse
 
 
 class ValidationException(Exception):
-    def __init__(self, errors: List[ValidationErrorDetail], message: str = "Schedule validation failed"):
-        super().__init__(message)
-        self.message = message
-        self.errors = errors
+    def __init__(self, errors: Any, message: Optional[str] = None):
+        if isinstance(errors, str):
+            msg = errors
+            errs = [errors]
+        else:
+            msg = message or "Schedule validation failed"
+            errs = errors
+        super().__init__(msg)
+        self.message = msg
+        self.errors = errs
 
     def to_dict(self) -> Dict[str, Any]:
         return {

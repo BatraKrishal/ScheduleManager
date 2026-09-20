@@ -17,6 +17,14 @@ from app.domain.models import (
 )
 from app.services.minio_service import minio_service
 from app.services.matching_service import MatchingService
+from app.services.extraction_service import ExtractionService
+
+
+@pytest.fixture(autouse=True)
+def disable_live_llm_extraction(monkeypatch):
+    """Ensure tests run hermetically without making live external LLM API calls."""
+    monkeypatch.setattr(ExtractionService, "extract_with_llm", classmethod(lambda cls, *args, **kwargs: None))
+
 
 
 SAMPLE_PDF_BYTES = (
@@ -564,6 +572,8 @@ def test_format_llm_results_schema_conformance():
 def test_extract_with_llm_graceful_fallback(monkeypatch):
     from app.services.extraction_service import ExtractionService
 
+    monkeypatch.delenv("EXTRACTION_GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("TIME_AGENT_GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 

@@ -20,7 +20,7 @@ class ConfidenceRoutingResultDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     event_id: str
-    artifact_id: str
+    artifact_id: Optional[str] = None
     route: str  # "AUTO_LINK", "PLANNER_REVIEW", "UNMATCHED"
     selected_candidate: Optional[MatchCandidateDTO] = None
     all_candidates: List[MatchCandidateDTO] = []

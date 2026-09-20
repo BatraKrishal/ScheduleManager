@@ -1,5 +1,10 @@
 import os
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+# Ensure test suite runs hermetically without making live external API calls
+os.environ["TIME_AGENT_GEMINI_API_KEY"] = ""
+os.environ["EXTRACTION_GEMINI_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["OPENAI_API_KEY"] = ""
 
 import pytest
 from fastapi.testclient import TestClient

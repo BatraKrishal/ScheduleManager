@@ -26,26 +26,30 @@ class ScheduleUpdateService:
         cls,
         db: Session,
         event_id: str,
-        activity_id: str,
+        activity_id: Optional[str] = None,
         user_id: str = "system-auto",
         override_percent: Optional[float] = None,
         action_name: str = "AUTO_LINK_PROGRESS",
+        quantity_semantics: str = "INCREMENTAL",
+        commit: bool = True,
     ) -> Activity:
         """
         Safely update an activity's progress from an approved/auto-linked ExecutionEvent:
-        1. Derive physical progress and incremental values
+        1. Derive physical progress and incremental values (supporting incremental & cumulative semantics)
         2. Insert into append-only actual_progress_ledger
         3. Validate and mutate Activity (enforcing CPM firewall on baseline dates)
         4. Record ScheduleAuditLog with full provenance to artifact_id and MinIO
         5. Insert task into domain_outbox for external writeback
+        6. Commit transaction if commit=True, or flush if caller owns transaction boundary
         """
         event = db.query(ExecutionEvent).filter(ExecutionEvent.id == event_id).first()
         if not event:
             raise ValueError(f"ExecutionEvent {event_id} not found.")
 
-        activity = db.query(Activity).filter(Activity.id == activity_id).first()
+        target_act_id = activity_id or event.matched_activity_id
+        activity = db.query(Activity).filter(Activity.id == target_act_id).first()
         if not activity:
-            raise ValueError(f"Activity {activity_id} not found.")
+            raise ValueError(f"Activity {target_act_id} not found.")
 
         # Check idempotency: Has this event already been applied to this activity?
         existing_ledger = (
@@ -70,14 +74,34 @@ class ScheduleUpdateService:
             "actual_finish": activity.actual_finish.isoformat() if activity.actual_finish else None,
         })
 
-        # Calculate new cumulative percent complete
+        # Calculate new cumulative percent complete and installed incremental quantity
+        installed_incremental_qty = event.quantity
         if override_percent is not None:
             new_pct = max(0.0, min(100.0, float(override_percent)))
         elif event.status_reported == "COMPLETED":
             new_pct = 100.0
-        elif event.quantity and activity.planned_quantity and activity.planned_quantity > 0:
-            qty_ratio = (event.quantity / activity.planned_quantity) * 100.0
-            new_pct = min(100.0, prev_pct + qty_ratio)
+        elif event.quantity is not None and activity.planned_quantity and activity.planned_quantity > 0:
+            if quantity_semantics == "CUMULATIVE":
+                q_planned = float(activity.planned_quantity)
+                q_prev = round((prev_pct / 100.0) * q_planned, 4)
+                q_cum = float(event.quantity)
+
+                if q_cum < q_prev:
+                    raise ValidationException(
+                        f"Reported cumulative quantity ({q_cum} {event.unit or ''}) is less than previously recorded installed quantity ({q_prev} {event.unit or ''}). Execution reporting cannot decrease progress."
+                    )
+                elif q_cum == q_prev:
+                    installed_incremental_qty = 0.0
+                    new_pct = prev_pct
+                elif q_cum > q_planned:
+                    installed_incremental_qty = round(q_cum - q_prev, 4)
+                    new_pct = 100.0
+                else:
+                    installed_incremental_qty = round(q_cum - q_prev, 4)
+                    new_pct = min(100.0, (q_cum / q_planned) * 100.0)
+            else:
+                qty_ratio = (event.quantity / activity.planned_quantity) * 100.0
+                new_pct = min(100.0, prev_pct + qty_ratio)
         else:
             # Shift progress increment (bounded)
             new_pct = min(100.0, prev_pct + 25.0 if prev_pct < 75.0 else 100.0)
@@ -99,7 +123,7 @@ class ScheduleUpdateService:
             activity_id=activity.id,
             execution_event_id=event.id,
             reporting_date=event.execution_date,
-            installed_quantity=event.quantity,
+            installed_quantity=installed_incremental_qty,
             unit_of_measure=event.unit,
             incremental_percent=incremental_pct,
             cumulative_percent=new_pct,
@@ -169,6 +193,9 @@ class ScheduleUpdateService:
         event.status = "APPLIED"
         event.matched_activity_id = activity.id
 
-        db.commit()
-        db.refresh(activity)
+        if commit:
+            db.commit()
+            db.refresh(activity)
+        else:
+            db.flush()
         return activity

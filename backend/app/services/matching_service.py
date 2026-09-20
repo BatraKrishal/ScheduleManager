@@ -252,3 +252,75 @@ class MatchingService:
             selected_candidate=top,
             all_candidates=scored_candidates[:5],
         )
+
+    @classmethod
+    def evaluate_event_for_agent(cls, db: Session, event: ExecutionEvent) -> ConfidenceRoutingResultDTO:
+        """
+        Evaluates matching candidates for Time Agent clarification turns without mutating
+        event.status to terminal/final review states and without executing db.commit().
+        Preserves in-flight DRAFT status while returning candidate scoring, margin deltas,
+        and confidence routing.
+        """
+        candidates = cls.retrieve_candidates(db, event)
+        if not candidates:
+            return ConfidenceRoutingResultDTO(
+                event_id=event.id,
+                artifact_id=event.artifact_id,
+                route="UNMATCHED",
+                selected_candidate=None,
+                all_candidates=[],
+            )
+
+        scored_candidates: List[MatchCandidateDTO] = []
+        for act in candidates:
+            wbs = db.query(WBSNode).filter(WBSNode.id == act.wbs_id).first() if act.wbs_id else None
+            score, breakdown = cls.score_activity(event, act, wbs)
+            scored_candidates.append(
+                MatchCandidateDTO(
+                    activity_id=act.id,
+                    activity_code=act.activity_code,
+                    activity_name=act.name,
+                    wbs_code=wbs.code if wbs else None,
+                    match_score=score,
+                    margin_delta=0.0,
+                    score_breakdown=breakdown,
+                )
+            )
+
+        scored_candidates.sort(key=lambda x: x.match_score, reverse=True)
+
+        top = scored_candidates[0]
+        if len(scored_candidates) > 1:
+            second = scored_candidates[1]
+            margin_delta = round(top.match_score - second.match_score, 3)
+        else:
+            margin_delta = top.match_score
+
+        top.margin_delta = margin_delta
+
+        is_auto_link = (
+            top.match_score >= 0.85
+            and margin_delta >= 0.15
+            and event.extraction_confidence >= 0.80
+        )
+
+        route = "AUTO_LINK" if is_auto_link else "PLANNER_REVIEW"
+
+        # Update in-memory match attributes on event without changing status to AUTO_LINKED or calling db.commit()
+        event.matched_activity_id = top.activity_id
+        event.match_score = top.match_score
+        event.match_metadata = json.dumps({
+            "route": route,
+            "margin_delta": margin_delta,
+            "top_candidate": top.model_dump(),
+            "all_scored": [c.model_dump() for c in scored_candidates[:5]],
+        })
+
+        return ConfidenceRoutingResultDTO(
+            event_id=event.id,
+            artifact_id=event.artifact_id,
+            route=route,
+            selected_candidate=top,
+            all_candidates=scored_candidates[:5],
+        )
+

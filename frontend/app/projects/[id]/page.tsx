@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileSpreadsheet,
+  Bot,
 } from "lucide-react";
 import { fetchProject, fetchActivities } from "@/lib/api";
 import { Activity, Project } from "@/lib/types";
@@ -21,8 +22,9 @@ import ActivityEditorModal from "@/components/ActivityEditorModal";
 import WbsTree from "@/components/WbsTree";
 import GanttChart from "@/components/GanttChart";
 import FieldReportsAndReview from "@/components/FieldReportsAndReview";
+import TimeAgentChat from "@/components/TimeAgentChat";
 
-type ActiveTab = "overview" | "wbs" | "activities" | "gantt" | "reports";
+type ActiveTab = "overview" | "wbs" | "activities" | "gantt" | "reports" | "agent";
 
 export default function ProjectWorkspace() {
   const params = useParams();
@@ -232,6 +234,18 @@ export default function ProjectWorkspace() {
             <FileSpreadsheet className="h-4 w-4" />
             Field Reports & Review
           </button>
+
+          <button
+            onClick={() => setActiveTab("agent")}
+            className={`flex items-center gap-2 pb-4 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === "agent"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Bot className="h-4 w-4" />
+            Time Agent
+          </button>
         </nav>
       </div>
 
@@ -335,6 +349,15 @@ export default function ProjectWorkspace() {
       {activeTab === "reports" && (
         <FieldReportsAndReview
           projectId={projectId}
+          onScheduleUpdated={() => setRefreshCounter((c) => c + 1)}
+        />
+      )}
+
+      {/* Tab 6: Time Agent */}
+      {activeTab === "agent" && (
+        <TimeAgentChat
+          projectId={projectId}
+          projectName={project.name || project.project_code}
           onScheduleUpdated={() => setRefreshCounter((c) => c + 1)}
         />
       )}

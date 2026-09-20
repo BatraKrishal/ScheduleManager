@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -54,6 +55,12 @@ class Project(Base):
     )
     execution_events: Mapped[List[ExecutionEvent]] = relationship(
         "ExecutionEvent", back_populates="project", cascade="all, delete-orphan"
+    )
+    conversations: Mapped[List[Conversation]] = relationship(
+        "Conversation", back_populates="project", cascade="all, delete-orphan"
+    )
+    update_proposals: Mapped[List[UpdateProposal]] = relationship(
+        "UpdateProposal", back_populates="project", cascade="all, delete-orphan"
     )
 
 
@@ -279,10 +286,10 @@ class ExecutionEvent(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    artifact_id: Mapped[str] = mapped_column(
+    artifact_id: Mapped[Optional[str]] = mapped_column(
         String(36),
         ForeignKey("artifacts.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     project_id: Mapped[str] = mapped_column(
@@ -291,11 +298,26 @@ class ExecutionEvent(Base):
         nullable=False,
         index=True,
     )
-    source_report_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    source_document_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
-    file_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    page_number: Mapped[int] = mapped_column(Integer, default=1)
+    source_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="ARTIFACT"
+    )  # ARTIFACT, CONVERSATION, HYBRID
+    conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    message_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("conversation_messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_report_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    source_document_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    storage_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    file_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    page_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
     bounding_box: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string
     verbatim_excerpt: Mapped[str] = mapped_column(Text, nullable=False)
     activity_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -318,7 +340,7 @@ class ExecutionEvent(Base):
     extraction_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(50), default="UNMATCHED", index=True
-    )  # UNMATCHED, AUTO_LINKED, IN_REVIEW, APPROVED, REJECTED
+    )  # DRAFT, UNMATCHED, IN_REVIEW, AUTO_LINKED, APPLIED, REJECTED
     matched_activity_id: Mapped[Optional[str]] = mapped_column(
         String(36),
         ForeignKey("activities.id", ondelete="SET NULL"),
@@ -330,8 +352,14 @@ class ExecutionEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    artifact: Mapped[Artifact] = relationship("Artifact", back_populates="execution_events")
+    artifact: Mapped[Optional[Artifact]] = relationship("Artifact", back_populates="execution_events")
     project: Mapped[Project] = relationship("Project", back_populates="execution_events")
+    conversation: Mapped[Optional[Conversation]] = relationship(
+        "Conversation", back_populates="execution_events", foreign_keys=[conversation_id]
+    )
+    message: Mapped[Optional[ConversationMessage]] = relationship(
+        "ConversationMessage", foreign_keys=[message_id]
+    )
     matched_activity: Mapped[Optional[Activity]] = relationship(
         "Activity", back_populates="execution_events"
     )
@@ -340,6 +368,9 @@ class ExecutionEvent(Base):
     )
     progress_entries: Mapped[List[ActualProgressLedger]] = relationship(
         "ActualProgressLedger", back_populates="execution_event", cascade="all, delete-orphan"
+    )
+    update_proposals: Mapped[List[UpdateProposal]] = relationship(
+        "UpdateProposal", back_populates="event", cascade="all, delete-orphan"
     )
 
 
@@ -475,3 +506,150 @@ class DomainOutbox(Base):
     )  # PENDING, PROCESSED, FAILED
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, default="New Chat")
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False, default="site-supervisor")
+    active_activity_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("activities.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    active_event_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("execution_events.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
+    clarification_turns: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="ACTIVE", index=True
+    )  # ACTIVE, WAITING_FOR_USER, RESOLVED, ABANDONED
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    project: Mapped[Project] = relationship("Project", back_populates="conversations")
+    active_activity: Mapped[Optional[Activity]] = relationship(
+        "Activity", foreign_keys=[active_activity_id]
+    )
+    active_event: Mapped[Optional[ExecutionEvent]] = relationship(
+        "ExecutionEvent", foreign_keys=[active_event_id], post_update=True
+    )
+    messages: Mapped[List[ConversationMessage]] = relationship(
+        "ConversationMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationMessage.created_at",
+    )
+    execution_events: Mapped[List[ExecutionEvent]] = relationship(
+        "ExecutionEvent",
+        back_populates="conversation",
+        foreign_keys="ExecutionEvent.conversation_id",
+    )
+    update_proposals: Mapped[List[UpdateProposal]] = relationship(
+        "UpdateProposal",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sender: Mapped[str] = mapped_column(String(50), nullable=False)  # USER, AGENT, SYSTEM
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    message_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationships
+    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="messages")
+
+
+class UpdateProposal(Base):
+    __tablename__ = "update_proposals"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("execution_events.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    matched_activity_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("activities.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    proposed_state: Mapped[str] = mapped_column(Text, nullable=False)  # JSON delta
+    baseline_activity_state: Mapped[str] = mapped_column(Text, nullable=False)  # JSON snapshot
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="PENDING", index=True
+    )  # PENDING, CONFIRMED, CONSUMED, REJECTED, EXPIRED
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    confirmed_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="update_proposals")
+    event: Mapped[ExecutionEvent] = relationship("ExecutionEvent", back_populates="update_proposals")
+    project: Mapped[Project] = relationship("Project", back_populates="update_proposals")
+    matched_activity: Mapped[Activity] = relationship("Activity")
+
+    @property
+    def baseline_percent(self) -> float:
+        if not self.baseline_activity_state:
+            return 0.0
+        try:
+            return float(json.loads(self.baseline_activity_state).get("percent_complete", 0.0))
+        except Exception:
+            return 0.0
+
+    @property
+    def proposed_percent(self) -> float:
+        if not self.proposed_state:
+            return 0.0
+        try:
+            return float(json.loads(self.proposed_state).get("proposed_percent", 0.0))
+        except Exception:
+            return 0.0
+

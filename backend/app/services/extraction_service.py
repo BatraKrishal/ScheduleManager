@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.models import Artifact, ExecutionEvent
 from app.schemas.extraction import NormalizedExtractionEvent
+from app.services.credential_resolver import CredentialResolver
 from app.services.minio_service import minio_service
 
 logger = logging.getLogger("extraction_service")
@@ -151,7 +152,8 @@ class ExtractionService:
         Enforces strict JSON schema as defined in EXTRACTION_MATCHING_SCHEDULE_INTEGRATION.md Section 3.2.
         Returns None if no API key is set or if the LLM call fails, allowing seamless fallback.
         """
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        extraction_cred = CredentialResolver.resolve_extraction_credentials()
+        gemini_api_key = extraction_cred.api_key
         openai_api_key = os.getenv("OPENAI_API_KEY")
 
         if not gemini_api_key and not openai_api_key:
@@ -200,7 +202,7 @@ FIELD REPORT TEXT:
 """
         try:
             if gemini_api_key:
-                primary_model = os.getenv("LLM_MODEL", "gemini-3.5-flash")
+                primary_model = extraction_cred.model
                 # Cascade order: primary model, then high-availability models if demand spikes occur
                 candidate_pool = [primary_model, "gemini-3.5-flash", "gemini-2.5-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]
                 models_to_try = []
@@ -209,7 +211,11 @@ FIELD REPORT TEXT:
                         models_to_try.append(m)
 
                 for model in models_to_try:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_api_key}"
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                    headers = {
+                        "x-goog-api-key": gemini_api_key,
+                        "Content-Type": "application/json",
+                    }
                     payload = {
                         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                         "generationConfig": {
@@ -219,7 +225,7 @@ FIELD REPORT TEXT:
                     }
                     try:
                         with httpx.Client(timeout=30.0) as client:
-                            resp = client.post(url, json=payload)
+                            resp = client.post(url, headers=headers, json=payload)
                             if resp.status_code == 200:
                                 data = resp.json()
                                 candidates = data.get("candidates", [])
@@ -227,7 +233,7 @@ FIELD REPORT TEXT:
                                     part_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                                     result_json = json.loads(part_text)
                                     return cls._format_llm_results(result_json, raw_text)
-                            logger.warning(f"Gemini API ({model}) returned status {resp.status_code}: {resp.text}")
+                            logger.warning(f"Gemini API ({model}) returned HTTP status {resp.status_code}")
                     except Exception as model_err:
                         logger.warning(f"Error calling Gemini model {model}: {model_err}")
 
@@ -477,7 +483,7 @@ FIELD REPORT TEXT:
 
             if "pdf" in mtype or fname.endswith(".pdf"):
                 # Check for LLM extraction first if API key configured
-                if os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY"):
+                if CredentialResolver.resolve_extraction_credentials().api_key or os.getenv("OPENAI_API_KEY"):
                     try:
                         import pypdf
                         reader = pypdf.PdfReader(io.BytesIO(file_bytes))
@@ -503,7 +509,7 @@ FIELD REPORT TEXT:
             else:
                 # Text or generic binary fallback
                 text = file_bytes[:5000].decode("utf-8", errors="replace")
-                if (os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")) and text.strip():
+                if (CredentialResolver.resolve_extraction_credentials().api_key or os.getenv("OPENAI_API_KEY")) and text.strip():
                     llm_events = cls.extract_with_llm(text, artifact.original_filename)
                     if llm_events:
                         extracted_items = llm_events
