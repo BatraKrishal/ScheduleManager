@@ -23,6 +23,7 @@ import {
   sendAgentMessage,
   uploadAgentAttachment,
   confirmUpdateProposal,
+  confirmTimeAgentBulkProposal,
   fetchProject,
 } from "@/lib/api";
 import {
@@ -268,8 +269,82 @@ export default function TimeAgentChat({
   };
 
   // Handle Clarification Option Selection
-  const handleSelectClarificationOption = (value: string) => {
-    handleSendMessage(value);
+  const handleSelectClarificationOption = async (value: string) => {
+    if (value === "CANCEL") {
+      const lastMsgWithBulk = [...messages].reverse().find(
+        (m) => m.message_metadata?.type === "BULK_SCOPE_PROPOSAL" && !m.message_metadata?.proposal_status
+      );
+      if (lastMsgWithBulk && lastMsgWithBulk.message_metadata?.bulk_activities?.length && activeConversation) {
+        try {
+          setActionLoading("bulk-cancel");
+          const actIds = lastMsgWithBulk.message_metadata.bulk_activities.map((a: any) => a.activity_id);
+          await confirmTimeAgentBulkProposal(
+            projectId,
+            activeConversation.conversation_id,
+            actIds,
+            "CANCEL"
+          );
+          selectConversation(activeConversation.conversation_id);
+          return;
+        } catch (err: any) {
+          console.error("Cancel bulk error:", err);
+        } finally {
+          setActionLoading(null);
+        }
+      }
+      handleSendMessage("Cancel this update");
+    } else if (value === "NONE_OF_THESE") {
+      handleSendMessage("None of these");
+    } else {
+      handleSendMessage(value);
+    }
+  };
+
+  // Handle Bulk Proposal Confirmation
+  const handleConfirmBulkProposal = async (activityIds: string[], targetPercent: number = 100.0) => {
+    if (!activeConversation) return;
+    try {
+      setActionLoading("bulk-action");
+      setError(null);
+      const res = await confirmTimeAgentBulkProposal(
+        projectId,
+        activeConversation.conversation_id,
+        activityIds,
+        "CONFIRM",
+        targetPercent
+      );
+
+      setSuccessBanner(
+        `Bulk update applied! Successfully updated ${res.updated_count} activities to ${targetPercent}%.`
+      );
+
+      // Mutate local message card status to APPLIED
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.message_metadata?.type === "BULK_SCOPE_PROPOSAL") {
+            return {
+              ...m,
+              message_metadata: {
+                ...m.message_metadata,
+                proposal_status: "APPLIED",
+              },
+            };
+          }
+          return m;
+        })
+      );
+
+      if (onScheduleUpdated) {
+        onScheduleUpdated();
+      }
+
+      // Re-fetch conversation to sync messages and state
+      selectConversation(activeConversation.conversation_id);
+    } catch (err: any) {
+      setError(err.message || "Failed to apply bulk update.");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   // Handle Proposal Confirmation
@@ -606,13 +681,15 @@ export default function TimeAgentChat({
                       />
                     )}
 
-                  {/* Clarification Choice Card */}
+                  {/* Clarification Choice Card & Bulk Scope Proposal Card */}
                   {msg.message_metadata &&
-                    msg.message_metadata.type === "CLARIFICATION_CHOICE" && (
+                    (msg.message_metadata.type === "CLARIFICATION_CHOICE" ||
+                      msg.message_metadata.type === "BULK_SCOPE_PROPOSAL") && (
                       <ClarificationCard
                         card={msg.message_metadata}
                         onSelectOption={handleSelectClarificationOption}
-                        disabled={sendingMessage}
+                        onConfirmBulk={handleConfirmBulkProposal}
+                        disabled={sendingMessage || !!actionLoading}
                       />
                     )}
                 </div>

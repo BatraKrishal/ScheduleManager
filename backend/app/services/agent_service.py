@@ -24,6 +24,8 @@ from app.domain.models import (
 from app.schemas.agent import (
     ActionCardDTO,
     AttachmentResponseDTO,
+    BulkProposalConfirmRequest,
+    BulkProposalConfirmResponse,
     ConversationCreateRequest,
     ConversationDTO,
     ConversationSummaryDTO,
@@ -349,6 +351,48 @@ class TimeAgentService:
         conv.updated_at = datetime.utcnow()
         db.flush()
 
+        # 2c. Check for explicit user cancellation requests (e.g. "cancel", "cancel this update", "cancel proposal")
+        clean_user_txt = user_content.strip().lower().rstrip(".,;:!?")
+        if any(clean_user_txt == c or clean_user_txt.startswith(c) for c in [
+            "cancel", "cancel this", "cancel update", "cancel this update", "cancel it", "cancel proposal", "don't update", "abort"
+        ]):
+            if conv.active_event_id:
+                active_ev = db.query(ExecutionEvent).filter(ExecutionEvent.id == conv.active_event_id).first()
+                if active_ev:
+                    active_ev.status = "REJECTED"
+                pending_props = db.query(UpdateProposal).filter(
+                    UpdateProposal.conversation_id == conv.id,
+                    UpdateProposal.status == "PENDING",
+                ).all()
+                for p in pending_props:
+                    p.status = "REJECTED"
+                conv.active_event_id = None
+                conv.status = "ACTIVE"
+                db.commit()
+                reply_text = "Update cancelled. No changes were applied to the schedule."
+                return cls._save_and_return_agent_response(db, conv, reply_text, action_card=None)
+            else:
+                prior_agent_msgs = (
+                    db.query(ConversationMessage)
+                    .filter(ConversationMessage.conversation_id == conv.id, ConversationMessage.sender == "AGENT")
+                    .order_by(ConversationMessage.created_at.desc())
+                    .limit(5)
+                    .all()
+                )
+                was_recently_updated = any(
+                    any(term in m.content.lower() for term in ["successfully updated", "successfully applied", "confirmed and applied"])
+                    for m in prior_agent_msgs
+                )
+                if was_recently_updated:
+                    reply_text = (
+                        "The previous update has already been committed and applied to the authoritative schedule ledger. "
+                        "Committed progress cannot be simply undone with a cancel command; to adjust or revert progress, "
+                        "please report the new progress percentage (e.g., 'set ELE-1001 to 0%') or update the activities in the Activities Table."
+                    )
+                else:
+                    reply_text = "There are no pending updates or proposals to cancel."
+                return cls._save_and_return_agent_response(db, conv, reply_text, action_card=None)
+
         # 3. Branch by Intent
         if parsed.intent == "INFORMATION_QUERY":
             reply_text = cls._handle_information_query(db, project, conv, parsed, user_content)
@@ -366,6 +410,17 @@ class TimeAgentService:
                 reply_text=reply_text,
                 action_card=None,
                 created_at=agent_msg.created_at.isoformat(),
+            )
+
+        if parsed.intent == "BULK_PROGRESS_REPORT" or (parsed.is_bulk and not is_clarification):
+            return cls._handle_bulk_progress(
+                db=db,
+                project=project,
+                conv=conv,
+                parsed=parsed,
+                raw_text=user_content,
+                trigger_message_id=user_msg.id,
+                caller_id=caller_id,
             )
 
         # Handle Progress Report / Update Request / Clarification
@@ -417,6 +472,51 @@ class TimeAgentService:
                     f"with {act.percent_complete or 0.0}% progress recorded."
                 )
 
+        # Check for historical knowledge / productivity / duration questions
+        lower = raw_text.lower()
+        is_historical = any(
+            term in lower
+            for term in [
+                "historical", "observed", "production rate", "rate of", "how long did",
+                "past", "average duration", "planned vs actual", "variance", "productivity",
+                "per day", "per reporting day", "history", "benchmark", "how much did we install",
+                "pouring rate", "installation rate"
+            ]
+        )
+        if is_historical:
+            q_type = "PRODUCTIVITY"
+            if any(term in lower for term in ["duration", "long", "time taken", "variance"]):
+                q_type = "DURATION"
+            elif any(term in lower for term in ["history", "records", "ledger"]):
+                q_type = "EXECUTION_HISTORY"
+
+            disc = parsed.discipline
+            if not disc:
+                if "pipe" in lower or "piping" in lower:
+                    disc = "Piping"
+                elif "concrete" in lower or "civil" in lower or "foundation" in lower:
+                    disc = "Civil"
+                elif "cable" in lower or "electrical" in lower:
+                    disc = "Electrical"
+                elif "mechanical" in lower:
+                    disc = "Mechanical"
+
+            act_code = parsed.reported_activity_code
+
+            tool_res = cls.query_historical_performance(
+                db=db,
+                project_id=project.id,
+                query_type=q_type,
+                discipline=disc,
+                activity_code=act_code,
+                unit=parsed.unit,
+            )
+            summary = tool_res.get("summary", "")
+            evidence_count = len(tool_res.get("evidence", []))
+            if evidence_count > 0:
+                summary += f"\n\n[Verified Evidence: {evidence_count} authoritative ledger record(s) in PostgreSQL]"
+            return summary
+
         # General project summary
         act_count = db.query(Activity).filter(Activity.project_id == project.id).count()
         data_date_str = project.data_date.strftime('%Y-%m-%d') if project.data_date else 'Current'
@@ -424,6 +524,266 @@ class TimeAgentService:
             f"Project {project.name} ({project.project_code}) has {act_count} activities. "
             f"Current data date is {data_date_str}. You can report progress by stating quantities and locations "
             f"(e.g., 'We poured 35 m3 for F-204 today')."
+        )
+
+    @classmethod
+    def query_historical_performance(
+        cls,
+        db: Session,
+        project_id: str,
+        query_type: str = "PRODUCTIVITY",
+        discipline: Optional[str] = None,
+        activity_code: Optional[str] = None,
+        unit: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Read-only Time Agent tool to query historical performance and productivity records.
+        Strictly scopes to project_id.
+        PostgreSQL is authoritative: returns deterministic calculation with evidence records.
+        """
+        from app.schemas.institutional_memory import HistoricalQueryRequest
+        from app.services.institutional_memory_service import InstitutionalMemoryService
+
+        req = HistoricalQueryRequest(
+            query_type=query_type,
+            discipline=discipline,
+            activity_code=activity_code,
+            unit=unit,
+        )
+        res = InstitutionalMemoryService.execute_query(db, project_id, req)
+        return res.model_dump()
+
+    @classmethod
+    def _handle_bulk_progress(
+        cls,
+        db: Session,
+        project: Project,
+        conv: Conversation,
+        parsed: ParsedConversationalIntent,
+        raw_text: str,
+        trigger_message_id: str,
+        caller_id: str,
+        active_event: Optional[ExecutionEvent] = None,
+    ) -> MessageResponseDTO:
+        """
+        Governed bulk intent handler.
+        The LLM NEVER determines activity membership.
+        The backend queries the authoritative database for activities matching the extracted scope.
+        """
+        scope = parsed.bulk_scope or {}
+        disc = scope.get("discipline") or parsed.discipline
+        loc = scope.get("location") or parsed.location
+        kw = scope.get("keyword")
+
+        # Query authoritative active activities for this project
+        query = db.query(Activity).filter(
+            Activity.project_id == project.id,
+            Activity.status != "COMPLETED",
+        )
+
+        all_acts = query.all()
+        matched_acts: List[Activity] = []
+
+        for act in all_acts:
+            match = False
+            # 1. Match discipline
+            if disc:
+                if act.discipline and disc.lower() in act.discipline.lower():
+                    match = True
+                elif disc.lower() in act.name.lower():
+                    match = True
+            # 2. Match keyword
+            if kw and (kw.lower() in act.name.lower() or (act.discipline and kw.lower() in act.discipline.lower())):
+                match = True
+            # 3. Match location if specified
+            if loc and act.location_code and loc.lower() in act.location_code.lower():
+                match = True
+
+            if match and act not in matched_acts:
+                matched_acts.append(act)
+
+        # Fallback 1: if specific discipline/keyword didn't find any, but user mentioned words in raw_text
+        if not matched_acts:
+            clean_tokens = [
+                w for w in re.findall(r"[A-Za-z0-9]+", raw_text.lower())
+                if len(w) > 3 and w not in ["have", "completed", "finish", "finished", "update", "them", "these", "project", "work", "activities", "activity", "both"]
+            ]
+            if clean_tokens:
+                for act in all_acts:
+                    if any(tok in act.name.lower() or (act.discipline and tok in act.discipline.lower()) for tok in clean_tokens):
+                        if act not in matched_acts:
+                            matched_acts.append(act)
+
+        # Fallback 2: If during clarification or active event, resolve to candidate activities of the active event
+        if not matched_acts:
+            active_ev = active_event
+            if not active_ev and conv.active_event_id:
+                active_ev = db.query(ExecutionEvent).filter(ExecutionEvent.id == conv.active_event_id).first()
+            if active_ev:
+                eval_res = MatchingService.evaluate_event_for_agent(db, active_ev)
+                cands = eval_res.all_candidates
+                if cands:
+                    cand_slice = [c for c in cands if c.match_score >= 0.25]
+                    if len(cand_slice) < 2 and len(cands) >= 2:
+                        cand_slice = cands[:2]
+                    elif not cand_slice:
+                        cand_slice = cands[:4]
+                    cand_ids = [c.activity_id for c in cand_slice]
+                    acts_found = db.query(Activity).filter(Activity.id.in_(cand_ids)).all()
+                    act_map = {a.id: a for a in acts_found}
+                    for cid in cand_ids:
+                        if cid in act_map and act_map[cid] not in matched_acts:
+                            matched_acts.append(act_map[cid])
+
+        target_pct = parsed.override_percent if parsed.override_percent is not None else 100.0
+        scope_desc = f"{disc} " if disc else (f"{kw} " if kw else "")
+        scope_desc = f"{scope_desc}activities".strip()
+        if scope_desc == "activities":
+            scope_desc = "matching candidate activities"
+
+        if len(matched_acts) == 0:
+            reply_text = (
+                f"I could not find any active activities matching '{raw_text}' in project {project.name}. "
+                f"Could you please specify which activity code or work package this progress belongs to?"
+            )
+            return cls._save_and_return_agent_response(db=db, conv=conv, reply_text=reply_text, action_card=None)
+
+        if len(matched_acts) == 1:
+            # Single activity match -> route to single proposal
+            target_act = matched_acts[0]
+            prev_pct = target_act.percent_complete or 0.0
+            event = ExecutionEvent(
+                id=f"ev-{uuid.uuid4().hex[:8]}",
+                project_id=project.id,
+                source_type="CONVERSATION",
+                conversation_id=conv.id,
+                message_id=trigger_message_id,
+                verbatim_excerpt=raw_text,
+                description=parsed.description or raw_text,
+                reported_activity_code=target_act.activity_code,
+                execution_date=project.data_date or datetime.utcnow(),
+                status_reported=parsed.status_reported or "COMPLETED",
+                extraction_confidence=1.0,
+                status="DRAFT",
+            )
+            db.add(event)
+            db.flush()
+            conv.active_event_id = event.id
+            proposal = cls.stage_proposal(
+                db=db,
+                conversation=conv,
+                event=event,
+                activity=target_act,
+                proposed_percent=target_pct,
+                proposed_status="COMPLETED" if target_pct == 100.0 else "IN_PROGRESS",
+                quantity_semantics="INCREMENTAL",
+                override_percent=target_pct,
+            )
+            card = ActionCardDTO(
+                type="PROPOSAL_CONFIRMATION",
+                proposal_id=proposal.id,
+                event_id=event.id,
+                activity_id=target_act.id,
+                activity_code=target_act.activity_code,
+                activity_name=target_act.name,
+                current_percent=prev_pct,
+                proposed_percent=target_pct,
+                execution_date=event.execution_date.strftime("%Y-%m-%d"),
+            )
+            reply_text = (
+                f"I've matched this to {target_act.activity_code} ({target_act.name}). "
+                f"This will advance progress from {prev_pct}% to {target_pct}%. "
+                f"Please confirm to apply this update to the authoritative schedule."
+            )
+            return cls._save_and_return_agent_response(db=db, conv=conv, reply_text=reply_text, action_card=card)
+
+        if 2 <= len(matched_acts) <= 6:
+            bulk_act_dtos = [
+                {
+                    "activity_id": act.id,
+                    "activity_code": act.activity_code,
+                    "activity_name": act.name,
+                    "current_percent": act.percent_complete or 0.0,
+                    "proposed_percent": target_pct,
+                }
+                for act in matched_acts
+            ]
+
+            card = ActionCardDTO(
+                type="BULK_SCOPE_PROPOSAL",
+                bulk_activities=bulk_act_dtos,
+                bulk_count=len(matched_acts),
+                scope_label=scope_desc.title(),
+                proposed_status="COMPLETED" if target_pct == 100.0 else "IN_PROGRESS",
+                target_percent=target_pct,
+                options=[
+                    {
+                        "label": f"Update All {len(matched_acts)} to {target_pct}%",
+                        "value": "CONFIRM_ALL_BULK",
+                    },
+                    *[
+                        {
+                            "label": f"{a.activity_code} - {a.name}",
+                            "value": a.activity_code,
+                        }
+                        for a in matched_acts
+                    ],
+                    {
+                        "label": "Cancel",
+                        "value": "CANCEL",
+                    },
+                ],
+            )
+            reply_text = (
+                f"I found {len(matched_acts)} {scope_desc} in this project. "
+                f"Do you want to update all {len(matched_acts)} to {target_pct}%, or select a specific activity?"
+            )
+            return cls._save_and_return_agent_response(
+                db=db,
+                conv=conv,
+                reply_text=reply_text,
+                action_card=card,
+            )
+
+        # More than 6 activities -> summarize + scoped review
+        bulk_act_dtos = [
+            {
+                "activity_id": act.id,
+                "activity_code": act.activity_code,
+                "activity_name": act.name,
+                "current_percent": act.percent_complete or 0.0,
+                "proposed_percent": target_pct,
+            }
+            for act in matched_acts[:5]
+        ]
+        card = ActionCardDTO(
+            type="BULK_SCOPE_PROPOSAL",
+            bulk_activities=bulk_act_dtos,
+            bulk_count=len(matched_acts),
+            scope_label=scope_desc.title(),
+            proposed_status="COMPLETED" if target_pct == 100.0 else "IN_PROGRESS",
+            target_percent=target_pct,
+            options=[
+                {
+                    "label": f"Review all {len(matched_acts)} activities in schedule table",
+                    "value": "REVIEW_IN_TABLE",
+                },
+                {
+                    "label": "Cancel",
+                    "value": "CANCEL",
+                },
+            ],
+        )
+        reply_text = (
+            f"I found {len(matched_acts)} {scope_desc} in this project schedule. "
+            f"Because this is a broad work package, updating all of them at once requires review in the Activities Table, "
+            f"or you can specify a specific area or block to narrow down the scope."
+        )
+        return cls._save_and_return_agent_response(
+            db=db,
+            conv=conv,
+            reply_text=reply_text,
+            action_card=card,
         )
 
     @classmethod
@@ -466,6 +826,45 @@ class TimeAgentService:
             elif not event.reported_activity_code:
                 # If supervisor answered a clarification question with an activity or foundation/location hint
                 clean_ans = raw_text.strip().rstrip(".,;:!?").lower()
+
+                # 1. Handle "None of these"
+                if clean_ans in ["none_of_these", "none of these", "neither", "none", "no"]:
+                    if conv.clarification_turns >= 2:
+                        event.status = "IN_REVIEW"
+                        conv.active_event_id = None
+                        conv.status = "ACTIVE"
+                        reply_text = "I could not resolve this report after clarification. I have routed it to the Lead Planner Review Queue for manual verification."
+                        return cls._save_and_return_agent_response(db=db, conv=conv, reply_text=reply_text, action_card=None)
+                    else:
+                        conv.clarification_turns += 1
+                        conv.status = "WAITING_FOR_USER"
+                        reply_text = "Understood. Could you please specify the exact activity code (e.g., ELE-1001) or work package name?"
+                        return cls._save_and_return_agent_response(db=db, conv=conv, reply_text=reply_text, action_card=None)
+
+                # 2. Handle "All of them" / bulk intent during clarification turn
+                if parsed.is_bulk or any(clean_ans == term or clean_ans.startswith(term) for term in [
+                    "all of them", "all", "both", "both of them", "all of these", "update all", "update all of them", "all activities"
+                ]):
+                    if not parsed.discipline and event.discipline:
+                        parsed.discipline = event.discipline
+                    if not parsed.bulk_scope:
+                        parsed.bulk_scope = {}
+                    if not parsed.bulk_scope.get("discipline") and event.discipline:
+                        parsed.bulk_scope["discipline"] = event.discipline
+                    if not parsed.bulk_scope.get("keyword") and event.description:
+                        parsed.bulk_scope["keyword"] = event.description
+
+                    return cls._handle_bulk_progress(
+                        db=db,
+                        project=project,
+                        conv=conv,
+                        parsed=parsed,
+                        raw_text=event.verbatim_excerpt or raw_text,
+                        trigger_message_id=event.message_id or f"msg-{uuid.uuid4().hex[:8]}",
+                        caller_id=caller_id,
+                        active_event=event,
+                    )
+
                 matching_acts = db.query(Activity).filter(Activity.project_id == project.id).all()
                 clean_tokens = [t for t in re.findall(r"[A-Za-z0-9]+-[A-Za-z0-9]+|[A-Za-z0-9]+", clean_ans) if len(t) > 2]
                 for act in matching_acts:
@@ -678,8 +1077,23 @@ class TimeAgentService:
         conv.status = "WAITING_FOR_USER"
 
         candidates = eval_result.all_candidates
-        if len(candidates) >= 2:
-            c1, c2 = candidates[0], candidates[1]
+        top_score = candidates[0].match_score if candidates else 0.0
+
+        # Dynamic selection: only present candidates when scores are sufficiently meaningful (>= 0.20)
+        if not candidates or top_score < 0.20:
+            meaningful_cands = []
+        else:
+            meaningful_cands = [
+                c for c in candidates
+                if c.match_score >= 0.25 and c.match_score >= (top_score - 0.25)
+            ]
+            if len(meaningful_cands) < 2 and len(candidates) >= 2 and candidates[1].match_score >= 0.20:
+                meaningful_cands = candidates[:2]
+            elif not meaningful_cands and candidates and top_score >= 0.20:
+                meaningful_cands = candidates[:1]
+
+        if len(meaningful_cands) == 2:
+            c1, c2 = meaningful_cands[0], meaningful_cands[1]
             question = f"Did this work apply to {c1.activity_code} ({c1.activity_name}) or {c2.activity_code} ({c2.activity_name})?"
             options = [
                 {
@@ -696,9 +1110,30 @@ class TimeAgentService:
                     "activity_name": c2.activity_name,
                     "confidence_score": c2.match_score,
                 },
+                {
+                    "label": "None of these",
+                    "value": "NONE_OF_THESE",
+                },
             ]
-        elif len(candidates) == 1:
-            c1 = candidates[0]
+        elif len(meaningful_cands) >= 3:
+            slice_cands = meaningful_cands[:4]
+            question = "I found several possible activities. Select the activity this update applies to:"
+            options = [
+                {
+                    "label": f"{c.activity_code} - {c.activity_name}",
+                    "value": c.activity_code,
+                    "activity_code": c.activity_code,
+                    "activity_name": c.activity_name,
+                    "confidence_score": c.match_score,
+                }
+                for c in slice_cands
+            ]
+            options.append({
+                "label": "None of these",
+                "value": "NONE_OF_THESE",
+            })
+        elif len(meaningful_cands) == 1:
+            c1 = meaningful_cands[0]
             question = f"Did this work apply to {c1.activity_code} ({c1.activity_name})? Please confirm the specific location or foundation."
             options = [
                 {
@@ -707,10 +1142,15 @@ class TimeAgentService:
                     "activity_code": c1.activity_code,
                     "activity_name": c1.activity_name,
                     "confidence_score": c1.match_score,
-                }
+                },
+                {
+                    "label": "None of these",
+                    "value": "NONE_OF_THESE",
+                },
             ]
         else:
-            question = "Could you please specify which activity code or work package this progress belongs to?"
+            desc_cited = parsed.description or raw_text
+            question = f"I could not find an activity matching '{desc_cited}' in project {project.name}. Could you please specify which activity code (e.g., CIV-1001) or work package this progress belongs to?"
             options = []
 
         return cls._save_and_return_agent_response(
@@ -1060,3 +1500,146 @@ class TimeAgentService:
             db.rollback()
             logger.error(f"Error during proposal confirmation: {e}")
             raise
+
+    @classmethod
+    def confirm_bulk_proposal(
+        cls,
+        db: Session,
+        project_id: str,
+        conversation_id: str,
+        payload: BulkProposalConfirmRequest,
+        caller_id: str = "site-supervisor",
+    ) -> BulkProposalConfirmResponse:
+        conv = (
+            db.query(Conversation)
+            .filter(Conversation.id == conversation_id, Conversation.project_id == project_id)
+            .first()
+        )
+        if not conv:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+
+        if payload.action == "CANCEL":
+            conv.active_event_id = None
+            conv.status = "ACTIVE"
+
+            # Mark prior bulk proposal message as CANCELLED
+            prior_msgs = (
+                db.query(ConversationMessage)
+                .filter(ConversationMessage.conversation_id == conv.id, ConversationMessage.sender == "AGENT")
+                .all()
+            )
+            for m in prior_msgs:
+                if m.message_metadata:
+                    try:
+                        meta = json.loads(m.message_metadata) if isinstance(m.message_metadata, str) else m.message_metadata
+                        if meta.get("type") == "BULK_SCOPE_PROPOSAL":
+                            meta["proposal_status"] = "CANCELLED"
+                            m.message_metadata = json.dumps(meta)
+                    except Exception:
+                        pass
+
+            cancel_msg = ConversationMessage(
+                id=f"msg-{uuid.uuid4().hex[:8]}",
+                conversation_id=conv.id,
+                sender="AGENT",
+                content="Bulk update cancelled by user. No schedule mutations were applied.",
+            )
+            db.add(cancel_msg)
+            db.commit()
+            return BulkProposalConfirmResponse(
+                status="CANCELLED",
+                updated_count=0,
+                updated_activities=[],
+                message="Bulk update cancelled by user.",
+            )
+
+        act_query = db.query(Activity).filter(Activity.project_id == project_id)
+        if payload.activity_ids:
+            act_query = act_query.filter(Activity.id.in_(payload.activity_ids))
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No activity IDs provided for bulk update.")
+
+        target_acts = act_query.all()
+        if not target_acts:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No matching activities found.")
+
+        target_pct = payload.target_percent if payload.target_percent is not None else 100.0
+        updated_records = []
+
+        try:
+            for act in target_acts:
+                ev = ExecutionEvent(
+                    id=f"ev-{uuid.uuid4().hex[:8]}",
+                    project_id=project_id,
+                    source_type="CONVERSATION",
+                    conversation_id=conv.id,
+                    verbatim_excerpt=f"Bulk update {act.activity_code} to {target_pct}%",
+                    description=f"Bulk progress update to {target_pct}% complete",
+                    reported_activity_code=act.activity_code,
+                    execution_date=datetime.utcnow(),
+                    status_reported=payload.status_reported or "COMPLETED",
+                    extraction_confidence=1.0,
+                    status="AUTO_LINKED",
+                )
+                db.add(ev)
+                db.flush()
+
+                prev_pct = act.percent_complete or 0.0
+                updated_act = ScheduleUpdateService.apply_event_progress(
+                    db=db,
+                    event_id=ev.id,
+                    activity_id=act.id,
+                    user_id=caller_id,
+                    override_percent=target_pct,
+                    action_name="TIME_AGENT_BULK_UPDATE",
+                    quantity_semantics="INCREMENTAL",
+                    commit=False,
+                )
+                updated_records.append({
+                    "activity_id": updated_act.id,
+                    "activity_code": updated_act.activity_code,
+                    "previous_percent": prev_pct,
+                    "new_percent": updated_act.percent_complete,
+                    "status": updated_act.status,
+                })
+
+            conv.active_event_id = None
+            conv.status = "RESOLVED"
+            conv.updated_at = datetime.utcnow()
+
+            # Mark prior bulk proposal card as APPLIED
+            prior_msgs = (
+                db.query(ConversationMessage)
+                .filter(ConversationMessage.conversation_id == conv.id, ConversationMessage.sender == "AGENT")
+                .all()
+            )
+            for m in prior_msgs:
+                if m.message_metadata:
+                    try:
+                        meta = json.loads(m.message_metadata) if isinstance(m.message_metadata, str) else m.message_metadata
+                        if meta.get("type") == "BULK_SCOPE_PROPOSAL":
+                            meta["proposal_status"] = "APPLIED"
+                            m.message_metadata = json.dumps(meta)
+                    except Exception:
+                        pass
+
+            summary_codes = ", ".join([r["activity_code"] for r in updated_records])
+            confirm_msg = ConversationMessage(
+                id=f"msg-{uuid.uuid4().hex[:8]}",
+                conversation_id=conv.id,
+                sender="AGENT",
+                content=f"Successfully updated {len(updated_records)} activities to {target_pct}% complete: {summary_codes}. Ledger audit records created and schedule refreshed.",
+            )
+            db.add(confirm_msg)
+            db.commit()
+
+            return BulkProposalConfirmResponse(
+                status="APPLIED",
+                updated_count=len(updated_records),
+                updated_activities=updated_records,
+                message=f"Applied bulk update to {len(updated_records)} activities.",
+            )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Bulk update failed: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

@@ -23,8 +23,10 @@ import WbsTree from "@/components/WbsTree";
 import GanttChart from "@/components/GanttChart";
 import FieldReportsAndReview from "@/components/FieldReportsAndReview";
 import TimeAgentChat from "@/components/TimeAgentChat";
+import InstitutionalMemoryWorkspace from "@/components/institutional-memory/InstitutionalMemoryWorkspace";
+import { Database } from "lucide-react";
 
-type ActiveTab = "overview" | "wbs" | "activities" | "gantt" | "reports" | "agent";
+type ActiveTab = "overview" | "wbs" | "activities" | "gantt" | "reports" | "agent" | "memory";
 
 export default function ProjectWorkspace() {
   const params = useParams();
@@ -246,6 +248,18 @@ export default function ProjectWorkspace() {
             <Bot className="h-4 w-4" />
             Time Agent
           </button>
+
+          <button
+            onClick={() => setActiveTab("memory")}
+            className={`flex items-center gap-2 pb-4 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === "memory"
+                ? "border-indigo-600 text-indigo-600 font-bold"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <Database className="h-4 w-4" />
+            Institutional Memory
+          </button>
         </nav>
       </div>
 
@@ -359,6 +373,14 @@ export default function ProjectWorkspace() {
           projectId={projectId}
           projectName={project.name || project.project_code}
           onScheduleUpdated={() => setRefreshCounter((c) => c + 1)}
+        />
+      )}
+
+      {/* Tab 7: Institutional Memory */}
+      {activeTab === "memory" && (
+        <InstitutionalMemoryWorkspace
+          projectId={projectId}
+          project={project}
         />
       )}
 

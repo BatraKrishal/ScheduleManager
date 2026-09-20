@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.domain.database import get_db
 from app.schemas.agent import (
     AttachmentResponseDTO,
+    BulkProposalConfirmRequest,
+    BulkProposalConfirmResponse,
     ConversationCreateRequest,
     ConversationDTO,
     ConversationSummaryDTO,
@@ -199,5 +201,30 @@ def confirm_update_proposal(
         project_id=project_id,
         conversation_id=conversation_id,
         proposal_id=payload.proposal_id,
+        caller_id=x_user_id,
+    )
+
+
+@router.post(
+    "/api/v1/projects/{project_id}/agent/conversations/{conversation_id}/bulk-confirm",
+    response_model=BulkProposalConfirmResponse,
+    status_code=status.HTTP_200_OK,
+)
+def confirm_bulk_update_proposal(
+    project_id: str,
+    conversation_id: str,
+    payload: BulkProposalConfirmRequest,
+    x_user_id: str = Header(default="site-supervisor", alias="X-User-ID"),
+    db: Session = Depends(get_db),
+):
+    """
+    Explicitly confirm a staged bulk update proposal.
+    Executes an atomic schedule mutation across all confirmed activities.
+    """
+    return TimeAgentService.confirm_bulk_proposal(
+        db=db,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        payload=payload,
         caller_id=x_user_id,
     )

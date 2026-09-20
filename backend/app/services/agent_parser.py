@@ -121,12 +121,15 @@ Is currently in clarification dialog: {is_clarification_turn}
 
 Classify into EXACTLY one of these intents:
 - INFORMATION_QUERY: Supervisor asks about schedule, activity details, duration, dates, or progress.
-- PROGRESS_REPORT: Supervisor describes physical construction work completed or underway.
+- PROGRESS_REPORT: Supervisor describes physical construction work completed or underway for a specific single activity.
 - PROGRESS_UPDATE_REQUEST: Supervisor directly requests a percentage or status change (e.g. "update this to 80%").
-- CLARIFICATION_RESPONSE: Supervisor provides missing information in direct response to an agent question (e.g. "F-204", "incremental").
+- CLARIFICATION_RESPONSE: Supervisor provides missing information in direct response to an agent question (e.g. "F-204", "incremental", "all of them").
 - ARTIFACT_SUBMISSION: Supervisor uploads or references a file attachment.
+- BULK_PROGRESS_REPORT: Supervisor describes physical progress or status change across a set/group of activities, an entire discipline, or an entire work package (e.g. "we have completed all the electrical activities", "finished all cable trays", "update all electrical activities to 100%").
 
 Extract the following fields if present in the message:
+- is_bulk: boolean true if user is reporting progress across multiple activities or entire discipline/work package, otherwise false
+- bulk_scope: object containing {{ "discipline": discipline, "location": location, "keyword": keyword, "wbs_hint": wbs_hint }} or null
 - quantity: numerical float or null
 - unit: standard engineering unit (m3, m2, t, m, ea) or null
 - quantity_semantics: INCREMENTAL (work done today/this shift), CUMULATIVE (total work completed to date), or UNKNOWN
@@ -145,6 +148,8 @@ Return ONLY valid JSON matching this structure:
 {{
   "intent": "PROGRESS_REPORT",
   "confidence": 0.95,
+  "is_bulk": false,
+  "bulk_scope": null,
   "entities_present": ["quantity", "unit", "location"],
   "quantity": 35.0,
   "unit": "m3",
@@ -201,7 +206,9 @@ USER MESSAGE:
                             if parsed.get("unit"):
                                 parsed["unit"] = ExtractionService.normalize_unit(parsed["unit"])
                             # Normalize status
-                            parsed["status_reported"] = ExtractionService.normalize_status(parsed.get("status_reported"))
+                            parsed["status_reported"] = ExtractionService.normalize_status(parsed.get("status_reported")) or "IN_PROGRESS"
+                            if not parsed.get("quantity_semantics"):
+                                parsed["quantity_semantics"] = "UNKNOWN"
                             return ParsedConversationalIntent(**parsed)
                     else:
                         logger.warning(f"Gemini model {model} returned HTTP {resp.status_code}")
@@ -234,7 +241,14 @@ USER MESSAGE:
             intent = "CLARIFICATION_RESPONSE"
         elif re.search(r"\b(?:update|set|mark)\b.*(?:to\s+\d+%|\bcomplete\b)", lower):
             intent = "PROGRESS_UPDATE_REQUEST"
-        elif any(verb in lower for verb in ["pour", "poured", "install", "installed", "erect", "erected", "excavat", "placed", "laid", "welded", "completed"]):
+        elif any(lower.strip().startswith(q_start) or f" {q_start} " in f" {lower} " for q_start in [
+            "what was", "what were", "what is", "how long", "how much did", "show me", "tell me", "can you tell", "is there", "what are"
+        ]):
+            intent = "INFORMATION_QUERY"
+        elif any(verb in lower for verb in [
+            "pour", "poured", "install", "installed", "erect", "erected", "excavat", "placed", "laid", "welded", "completed", "complete",
+            "build", "built", "construct", "constructed", "cast", "finish", "finished", "assembled", "done"
+        ]):
             intent = "PROGRESS_REPORT"
         else:
             intent = "PROGRESS_REPORT" if any(c.isdigit() for c in t) else "INFORMATION_QUERY"
@@ -339,9 +353,73 @@ USER MESSAGE:
         else:
             status_reported = "IN_PROGRESS"
 
+        # 10. Bulk Intent and Scope Detection
+        is_bulk = False
+        bulk_scope = None
+
+        clean_norm = " ".join(lower.split())
+        bulk_keywords = [
+            "all", "every", "everything", "all of the", "all of them",
+            "both", "both of them", "all of these", "all activities", "all the activities", "all of our activities"
+        ]
+        has_bulk_keyword = any(re.search(rf"\b{re.escape(bk)}\b", clean_norm) for bk in bulk_keywords)
+
+        has_scope_indicator = bool(
+            discipline
+            or any(w in clean_norm for w in ["activit", "work", "package", "cable", "tray", "pour", "concrete", "pipe", "piping", "steel", "lighting", "foundation"])
+        )
+
+        is_direct_bulk_clarification = is_clarification_turn and any(clean_norm == term or clean_norm.startswith(term) for term in [
+            "all of them", "all", "both", "both of them", "all of these", "update all", "update all of them", "all activities", "all the activities"
+        ])
+
+        if is_direct_bulk_clarification:
+            intent = "CLARIFICATION_RESPONSE"
+            is_bulk = True
+        elif has_bulk_keyword and has_scope_indicator and not reported_code:
+            intent = "BULK_PROGRESS_REPORT"
+            is_bulk = True
+        elif any(phrase in clean_norm for phrase in [
+            "finished the electrical work",
+            "completed the electrical work",
+            "finished the civil work",
+            "completed the civil work",
+            "finished the piping work",
+            "completed the piping work",
+            "finished the structural work",
+            "completed the structural work",
+        ]):
+            intent = "BULK_PROGRESS_REPORT"
+            is_bulk = True
+
+        if is_bulk:
+            keyword = None
+            if "cable tray" in clean_norm or "tray" in clean_norm:
+                keyword = "cable tray"
+            elif "cable" in clean_norm:
+                keyword = "cable"
+            elif "lighting" in clean_norm:
+                keyword = "lighting"
+            elif "foundation" in clean_norm:
+                keyword = "foundation"
+            elif "pipe" in clean_norm or "piping" in clean_norm:
+                keyword = "piping"
+            elif "concrete" in clean_norm:
+                keyword = "concrete"
+
+            bulk_scope = {
+                "discipline": discipline,
+                "location": location,
+                "keyword": keyword,
+                "wbs_hint": None,
+                "raw_text": t,
+            }
+
         return ParsedConversationalIntent(
             intent=intent,
             confidence=0.88 if intent != "INFORMATION_QUERY" else 0.95,
+            is_bulk=is_bulk,
+            bulk_scope=bulk_scope,
             entities_present=entities_present,
             quantity=qty,
             unit=unit,

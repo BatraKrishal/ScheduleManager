@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.activities import router as activities_router
 from app.api.agent import router as agent_router
+from app.api.analytics import router as analytics_router
 from app.api.artifacts import router as artifacts_router
 from app.api.export import router as export_router
 from app.api.matching import router as matching_router
@@ -81,3 +82,4 @@ app.include_router(matching_router)
 app.include_router(review_router)
 app.include_router(export_router)
 app.include_router(agent_router)
+app.include_router(analytics_router)

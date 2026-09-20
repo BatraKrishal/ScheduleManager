@@ -580,6 +580,44 @@ def test_gemini_credential_isolation(monkeypatch):
     assert p_fallback.gemini_api_key == "shared-fallback-key"
 
 
+def test_parse_with_gemini_prompt_formatting(monkeypatch):
+    """
+    Verifies that parse_with_gemini does not fail with ValueError due to unescaped f-string braces.
+    """
+    from app.services.agent_parser import ConversationalParser
+    import httpx
+
+    monkeypatch.setenv("TIME_AGENT_GEMINI_API_KEY", "dummy-api-key")
+
+    def mock_post(url, *args, **kwargs):
+        class MockResp:
+            status_code = 200
+            def json(self):
+                return {
+                    "candidates": [{
+                        "content": {
+                            "parts": [{
+                                "text": '{"intent": "BULK_PROGRESS_REPORT", "is_bulk": true, "bulk_scope": {"discipline": "Electrical"}, "status_reported": "COMPLETED"}'
+                            }]
+                        }
+                    }]
+                }
+        return MockResp()
+
+    monkeypatch.setattr(httpx.Client, "post", mock_post)
+
+    parsed = ConversationalParser.parse_with_gemini(
+        text="we have completed all the electrical activities update all of them",
+        project_data_date_str="2024-09-30",
+        active_activity_code=None,
+        is_clarification_turn=False,
+    )
+    assert parsed is not None
+    assert parsed.intent == "BULK_PROGRESS_REPORT"
+    assert parsed.is_bulk is True
+    assert parsed.bulk_scope == {"discipline": "Electrical"}
+
+
 # =========================================================================
 # TEST SUITE H: Schedule-Scoped Project Isolation & Chat History
 # =========================================================================
@@ -772,4 +810,285 @@ def test_deterministic_conversation_title_generation():
         "Installed water pump today."
     )
     assert "Pump Installation" in t4
+
+
+# =========================================================================
+# TEST SUITE H: Dynamic Multi-Choice Clarification & Explicit Bulk Intent
+# =========================================================================
+
+def test_dynamic_clarification_two_candidates_preserves_ab_and_none_of_these(
+    client: TestClient, agent_test_project: Project, db_session: Session
+):
+    """
+    Validates that when exactly 2 candidates compete with close scores,
+    the agent preserves the clean A/B comparison question and appends 'None of these'.
+    """
+    res_conv = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations",
+        json={"force_new": True},
+    )
+    conv_id = res_conv.json()["conversation_id"]
+
+    res_msg = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "We completed the foundation work today."},
+    )
+    assert res_msg.status_code == 200
+    data = res_msg.json()
+
+    # Should ask A/B question
+    reply = data["reply_text"]
+    assert "CIV-1001" in reply or "CIV-1002" in reply
+    assert "or" in reply
+
+    card = data["action_card"]
+    assert card is not None
+    assert card["type"] == "CLARIFICATION_CHOICE"
+    options = card["options"]
+    assert len(options) == 3  # Candidate 1, Candidate 2, and None of these
+    labels = [o["label"] for o in options]
+    values = [o["value"] for o in options]
+    assert any("CIV-1001" in l for l in labels)
+    assert any("CIV-1002" in l for l in labels)
+    assert "NONE_OF_THESE" in values
+
+
+def test_dynamic_clarification_multi_candidates_and_none_of_these(
+    client: TestClient, agent_test_project: Project, db_session: Session
+):
+    """
+    Validates that when 3-4 candidates compete, the agent switches to
+    a multi-choice clarification card with up to 4 candidates plus 'None of these'.
+    """
+    act3 = Activity(
+        id="act-civ-1003",
+        project_id=agent_test_project.id,
+        wbs_id="wbs-agent-1",
+        activity_code="CIV-1003",
+        name="Foundation Concrete Pour F-206",
+        status="NOT_STARTED",
+        percent_complete=0.0,
+    )
+    act4 = Activity(
+        id="act-civ-1004",
+        project_id=agent_test_project.id,
+        wbs_id="wbs-agent-1",
+        activity_code="CIV-1004",
+        name="Foundation Concrete Pour F-207",
+        status="NOT_STARTED",
+        percent_complete=0.0,
+    )
+    db_session.add_all([act3, act4])
+    db_session.commit()
+
+    res_conv = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations",
+        json={"force_new": True},
+    )
+    conv_id = res_conv.json()["conversation_id"]
+
+    res_msg = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "We poured foundation concrete today."},
+    )
+    assert res_msg.status_code == 200
+    data = res_msg.json()
+
+    card = data["action_card"]
+    assert card is not None
+    assert card["type"] == "CLARIFICATION_CHOICE"
+    options = card["options"]
+    assert len(options) >= 4  # 3 or 4 candidates + None of these
+    values = [o["value"] for o in options]
+    assert "NONE_OF_THESE" in values
+    assert "Select the activity" in data["reply_text"] or "possible activities" in data["reply_text"]
+
+
+def test_clarification_none_of_these_handling(
+    client: TestClient, agent_test_project: Project, db_session: Session
+):
+    """
+    Validates that selecting 'None of these' prompts the user to provide an explicit code.
+    """
+    res_conv = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations",
+        json={"force_new": True},
+    )
+    conv_id = res_conv.json()["conversation_id"]
+
+    # Trigger clarification
+    client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "We completed foundation work."},
+    )
+
+    # Respond with None of these
+    res_none = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "None of these"},
+    )
+    assert res_none.status_code == 200
+    reply = res_none.json()["reply_text"]
+    assert "specify" in reply.lower() and "activity code" in reply.lower()
+
+
+def test_bulk_intent_detection_and_scoped_proposal_presentation(
+    client: TestClient, agent_test_project: Project, db_session: Session
+):
+    """
+    Validates that 'we have completed all the electrical activities update all of them':
+    1. Extracts BULK_PROGRESS_REPORT intent.
+    2. Queries authoritative DB for matching activities (does not let LLM hallucinate).
+    3. Presents a BULK_SCOPE_PROPOSAL action card with total count and update button.
+    """
+    # Create 3 electrical activities in the project
+    ele1 = Activity(
+        id="act-ele-1001",
+        project_id=agent_test_project.id,
+        activity_code="ELE-1001",
+        name="Cable Tray Installation Level 1",
+        discipline="Electrical",
+        status="NOT_STARTED",
+        percent_complete=0.0,
+    )
+    ele2 = Activity(
+        id="act-ele-1002",
+        project_id=agent_test_project.id,
+        activity_code="ELE-1002",
+        name="Cable Tray Installation Level 2",
+        discipline="Electrical",
+        status="NOT_STARTED",
+        percent_complete=0.0,
+    )
+    ele3 = Activity(
+        id="act-ele-1003",
+        project_id=agent_test_project.id,
+        activity_code="ELE-1003",
+        name="Main Switchgear Wiring",
+        discipline="Electrical",
+        status="NOT_STARTED",
+        percent_complete=0.0,
+    )
+    db_session.add_all([ele1, ele2, ele3])
+    db_session.commit()
+
+    res_conv = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations",
+        json={"force_new": True},
+    )
+    conv_id = res_conv.json()["conversation_id"]
+
+    res_msg = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "we have completed all the electrical activities update all of them"},
+    )
+    assert res_msg.status_code == 200
+    data = res_msg.json()
+
+    # Agent should identify all 3 activities and present a BULK_SCOPE_PROPOSAL card
+    card = data["action_card"]
+    assert card is not None
+    assert card["type"] == "BULK_SCOPE_PROPOSAL"
+    assert card["bulk_count"] == 3
+    assert len(card["bulk_activities"]) == 3
+    act_codes = [a["activity_code"] for a in card["bulk_activities"]]
+    assert "ELE-1001" in act_codes
+    assert "ELE-1002" in act_codes
+    assert "ELE-1003" in act_codes
+
+    # Options should have CONFIRM_ALL_BULK
+    values = [o["value"] for o in card["options"]]
+    assert "CONFIRM_ALL_BULK" in values
+    assert "Cancel" in [o["label"] for o in card["options"]]
+
+
+def test_clarification_turn_all_of_them_interception(
+    client: TestClient, agent_test_project: Project, db_session: Session
+):
+    """
+    Validates that when the agent asks a clarification question between activities,
+    and the user replies 'all of them' or 'update all of them',
+    the agent intercepts this and transitions to the bulk scope workflow instead of looping!
+    """
+    res_conv = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations",
+        json={"force_new": True},
+    )
+    conv_id = res_conv.json()["conversation_id"]
+
+    # Trigger clarification between civil foundation activities
+    res1 = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "Foundation pour completed."},
+    )
+    assert res1.json()["action_card"]["type"] == "CLARIFICATION_CHOICE"
+
+    # Supervisor responds 'update all of them'
+    res_bulk = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/messages",
+        json={"content": "update all of them"},
+    )
+    assert res_bulk.status_code == 200
+    data_bulk = res_bulk.json()
+
+    # Must NOT re-ask between 2 choices! Must transition to BULK_SCOPE_PROPOSAL
+    card = data_bulk["action_card"]
+    assert card is not None
+    assert card["type"] == "BULK_SCOPE_PROPOSAL"
+    assert card["bulk_count"] >= 2
+
+
+def test_bulk_proposal_confirmation_executes_atomic_schedule_mutation(
+    client: TestClient, agent_test_project: Project, db_session: Session
+):
+    """
+    Validates that confirming a bulk proposal transactionally mutates each activity in the database,
+    creates actual progress ledger records, and creates schedule audit logs in a single atomic commit.
+    """
+    act_a = db_session.query(Activity).filter_by(id="act-civ-1001").first()
+    act_b = db_session.query(Activity).filter_by(id="act-civ-1002").first()
+    assert act_a.percent_complete == 0.0
+    assert act_b.percent_complete == 0.0
+
+    res_conv = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations",
+        json={"force_new": True},
+    )
+    conv_id = res_conv.json()["conversation_id"]
+
+    # Confirm bulk update for both activities to 100%
+    res_confirm = client.post(
+        f"/api/v1/projects/{agent_test_project.id}/agent/conversations/{conv_id}/bulk-confirm",
+        json={
+            "activity_ids": ["act-civ-1001", "act-civ-1002"],
+            "action": "CONFIRM",
+            "target_percent": 100.0,
+            "status_reported": "COMPLETED",
+        },
+    )
+    assert res_confirm.status_code == 200
+    confirm_data = res_confirm.json()
+    assert confirm_data["status"] == "APPLIED"
+    assert confirm_data["updated_count"] == 2
+
+    # Verify both activities in DB are updated
+    db_session.refresh(act_a)
+    db_session.refresh(act_b)
+    assert act_a.percent_complete == 100.0
+    assert act_a.status == "COMPLETED"
+    assert act_b.percent_complete == 100.0
+    assert act_b.status == "COMPLETED"
+
+    # Verify ledger entries created
+    ledgers_a = db_session.query(ActualProgressLedger).filter_by(activity_id="act-civ-1001").all()
+    ledgers_b = db_session.query(ActualProgressLedger).filter_by(activity_id="act-civ-1002").all()
+    assert len(ledgers_a) >= 1
+    assert len(ledgers_b) >= 1
+    assert ledgers_a[0].cumulative_percent == 100.0
+    assert ledgers_b[0].cumulative_percent == 100.0
+
+    # Verify audit logs created with TIME_AGENT_BULK_UPDATE action
+    audits = db_session.query(ScheduleAuditLog).filter_by(project_id=agent_test_project.id).all()
+    bulk_audits = [a for a in audits if a.action == "TIME_AGENT_BULK_UPDATE"]
+    assert len(bulk_audits) >= 2
 

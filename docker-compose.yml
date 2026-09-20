@@ -61,6 +61,8 @@ services:
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-8080}:8000"
+    volumes:
+      - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-primavera}
       - PARSER_URL=http://document-parser:8001
