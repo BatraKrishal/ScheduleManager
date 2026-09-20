@@ -6,54 +6,62 @@
 ---
 
 ```
-                 ScheduleManager Platform
+                           ScheduleManager Platform
+                       (Closed-Loop Intelligence Cycle)
 
-      PLAN                                 EXECUTE
-       │                                      │
-       │                              Field Evidence
-       │                        (Daily Reports, Spreadsheets,
-Primavera P6 XER / XML          Conversations, Audio Memos)
-       │                                      │
-       └───────────────┐      ┌───────────────┘
-                       ↓      ↓
-                 ExecutionEvent
-                       ↓
-         Multi-Signal Matching Engine
-                       ↓
-             Confidence Governance
-            ┌──────────┴──────────┐
-            ↓                     ↓
-       [AUTO_LINK]         [PLANNER_REVIEW]
-      (Score ≥ 0.85)       (Ambiguity / Margin < 0.15)
-            │                     │
-            │           ┌─────────┴─────────┐
-            │           ↓                   ↓
-            │      Time Agent         Lead Planner
-            │     Clarification       Review Queue
-            │           │                   │
-            └───────────┼───────────────────┘
-                        ↓
-                 UpdateProposal
-                        ↓
-             Explicit Human Confirmation
-                        ↓
-             ScheduleUpdateService
-            (Row Locks + CPM Invariant Firewall)
-            ┌───────────┴───────────┐
-            ↓                       ↓
-      Current Schedule      ActualProgressLedger
-      (Activities Table,     (Append-Only Execution History)
-       Gantt, XER Export)           ↓
-                            ScheduleAuditLog
-                             (Full Lineage to Artifact / MinIO)
-                                    ↓
-                        Institutional Memory V1
-                       (Deterministic Analytics Engine)
-                                    ↓
-                       ┌────────────┴────────────┐
-                       ↓                         ↓
-             Observed Productivity       Duration Variances
-             & Planning Benchmarks       & Historical Query
+       ┌──────────────────────────────────────────────────────────────┐
+       │                                                              │
+       │                   FEEDBACK TO FUTURE PLANNING                │
+       │            (Advisory Duration & Productivity Benchmarks)     │
+       │                                                              │
+       ▼                                                              │
+    [ PLAN ]                                                      [ EXECUTE ]
+       │                                                              │
+Primavera P6 Schedules                                         Field Reports &
+(Planned Activities, WBS,                                      Time Agent Chat
+ CPM Precedence Logic)                                         (Supervisor Logs,
+       │                                                        Photos, Evidence)
+       │                                                              │
+       └──────────────────────────────┬───────────────────────────────┘
+                                      ↓
+                                ExecutionEvent
+                                      ↓
+                         Multi-Signal Matching Engine
+                                      ↓
+                              Confidence Routing
+                                ┌─────┴─────┐
+                                ↓           ↓
+                           [AUTO_LINK] [PLANNER_REVIEW]
+                         (Score ≥ 0.85) (Ambiguous / Review)
+                                │           │
+                                └─────┬─────┘
+                                      ↓
+                                UpdateProposal
+                                      ↓
+                         Explicit Human Confirmation
+                                      ↓
+                            ScheduleUpdateService
+                         (Row Locks + CPM Firewall)
+                                ┌─────┴────────────────────────┐
+                                ↓                              ↓
+                        Current Schedule             ActualProgressLedger
+                       (Gantt / Activities /         (Append-Only Quantities)
+                         P6 XER Export)                        │
+                                                               ↓
+                                                    Institutional Memory V1
+                                                   (Deterministic SQL Engine)
+                                                               │
+                                  ┌────────────────────────────┴───────────────────────────┐
+                                  ↓                                                        ↓
+                       Observed Productivity Rates                             Planned vs. Actual Durations
+                       (e.g., 35 m³/day concrete)                              (Variance & P50/P80 Days)
+                                  │                                                        │
+                                  ├────────────────────────────┬───────────────────────────┘
+                                  ↓                            ↓
+                       Answers Time Agent Queries    Feeds Future Planning (PLAN)
+                      ("What was our pouring rate?") (Calibrates new project baselines)
+                                  │                            │
+                                  └────────────────────────────┘
 ```
 
 ---
@@ -159,6 +167,9 @@ flowchart TD
     IMS --> DRAWER["Evidence Lineage Drawer\n('Where did this number come from?')"]
     IMS --> CSV["RFC 4180 CSV Ledger Export"]
     IMS --> AGENT_TOOL["Time Agent Historical Query Tool\n(Grounded in Deterministic PostgreSQL Metrics)"]
+
+    IMS -.->|"Closed Loop: Baseline & Duration Calibration"| PLAN_FEEDBACK["Future Schedule Planning (PLAN)"]
+    AGENT_TOOL -.->|"Closed Loop: Historical Rate Inquiries"| EXEC_FEEDBACK["Field Execution & Chat (EXECUTE)"]
 ```
 
 ---
@@ -213,6 +224,7 @@ flowchart TB
         RouterAgent --> SUpdate
         RouterMem --> SAnalytics & SMemory
         RouterExp --> SXer
+        SAgent -.->|"query_historical_performance Tool"| SMemory
     end
 
     subgraph ParserService ["Document Parser Microservice (Port 8001)"]
@@ -299,6 +311,8 @@ classDiagram
 
     ConversationHistory ..> ScheduleState : Stages proposals for
     ScheduleState ..> InstitutionalMemory : Feeds verified actuals into
+    InstitutionalMemory ..> ScheduleState : Calibrates future baselines & duration benchmarks
+    InstitutionalMemory ..> ConversationHistory : Supplies verified metrics for chat queries
 ```
 
 ### 1. Conversation History (Project-Scoped)
@@ -640,8 +654,9 @@ flowchart TD
 
     LOCK --> AtomicTx
     AtomicTx --> COMMIT["Commit Transaction"]
-    COMMIT --> LIVE_UI["Real-Time UI Updates\n(Activities Grid, Gantt Shading, Memory Ledger)"]
+    COMMIT --> LIVE_UI["Real-Time UI Updates\n(Activities Grid, Gantt Shading, Live Workspace)"]
     COMMIT --> XER_READY["P6 XER Export Synchronized"]
+    COMMIT --> FEED_MEMORY["Powers Institutional Memory Engine\n(Feeds Historical Intelligence Loop)"]
 ```
 
 ---
@@ -696,6 +711,9 @@ flowchart TD
     IMS --> EVIDENCE["Evidence Lineage Drawer\n('Where did this number come from?')"]
     IMS --> CSV["RFC 4180 CSV Export Endpoint"]
     IMS --> AGENT_TOOL["Time Agent Tool: query_historical_performance\n(Authoritative Grounding in Chat)"]
+
+    IMS -.->|"Closed Loop: Baseline & Duration Calibration"| FUTURE_PLAN["Future Schedule Planning (PLAN)"]
+    AGENT_TOOL -.->|"Closed Loop: Conversational Productivity Inquiries"| FIELD_EXEC["Site Supervision & Chat (EXECUTE)"]
 ```
 
 > [!IMPORTANT]
