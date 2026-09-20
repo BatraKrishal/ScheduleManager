@@ -7,8 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.activities import router as activities_router
+from app.api.artifacts import router as artifacts_router
+from app.api.export import router as export_router
+from app.api.matching import router as matching_router
 from app.api.projects import router as projects_router
 from app.api.relationships import router as relationships_router
+from app.api.review import router as review_router
 from app.api.wbs import router as wbs_router
 from app.domain.database import init_db
 from app.services.validation_service import ValidationException
@@ -62,3 +66,7 @@ app.include_router(projects_router)
 app.include_router(wbs_router)
 app.include_router(activities_router)
 app.include_router(relationships_router)
+app.include_router(artifacts_router)
+app.include_router(matching_router)
+app.include_router(review_router)
+app.include_router(export_router)

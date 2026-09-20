@@ -20,8 +20,9 @@ import ActivityTable from "@/components/ActivityTable";
 import ActivityEditorModal from "@/components/ActivityEditorModal";
 import WbsTree from "@/components/WbsTree";
 import GanttChart from "@/components/GanttChart";
+import FieldReportsAndReview from "@/components/FieldReportsAndReview";
 
-type ActiveTab = "overview" | "wbs" | "activities" | "gantt";
+type ActiveTab = "overview" | "wbs" | "activities" | "gantt" | "reports";
 
 export default function ProjectWorkspace() {
   const params = useParams();
@@ -219,6 +220,18 @@ export default function ProjectWorkspace() {
             <Calendar className="h-4 w-4" />
             Gantt Timeline
           </button>
+
+          <button
+            onClick={() => setActiveTab("reports")}
+            className={`flex items-center gap-2 pb-4 text-sm font-semibold border-b-2 transition-colors ${
+              activeTab === "reports"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Field Reports & Review
+          </button>
         </nav>
       </div>
 
@@ -316,6 +329,14 @@ export default function ProjectWorkspace() {
       {/* Tab 4: Gantt Chart */}
       {activeTab === "gantt" && (
         <GanttChart projectId={projectId} onEditActivity={handleEditActivity} />
+      )}
+
+      {/* Tab 5: Field Reports & Review */}
+      {activeTab === "reports" && (
+        <FieldReportsAndReview
+          projectId={projectId}
+          onScheduleUpdated={() => setRefreshCounter((c) => c + 1)}
+        />
       )}
 
       {/* Activity Editor Modal */}

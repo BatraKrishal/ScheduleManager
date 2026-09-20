@@ -70,6 +70,8 @@ lerna-debug.log*
 *.log
 postgres_data/
 pgdata/
+.artifacts_storage/
+backend/.artifacts_storage/
 
 # OS & Editor files
 .DS_Store

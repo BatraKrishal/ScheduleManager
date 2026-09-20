@@ -32,6 +32,27 @@ services:
     networks:
       - p6-network
 
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: primavera-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - p6-network
+
   backend:
     build:
       context: ./backend
@@ -43,10 +64,20 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-primavera}
       - PARSER_URL=http://document-parser:8001
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=sih-artifacts
+      - MINIO_SECURE=false
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gemini-3.5-flash}
     depends_on:
       postgres:
         condition: service_healthy
       document-parser:
+        condition: service_started
+      minio:
         condition: service_started
     networks:
       - p6-network
@@ -72,4 +103,6 @@ networks:
 
 volumes:
   postgres_data:
+    driver: local
+  minio_data:
     driver: local

@@ -40,6 +40,12 @@ A production-grade Primavera schedule management web platform supporting import,
 
 ---
 
+## System Integration Specification
+
+* [EXTRACTION_MATCHING_SCHEDULE_INTEGRATION.md](file:///c:/Users/Gues/Desktop/sihnew/ScheduleManager/EXTRACTION_MATCHING_SCHEDULE_INTEGRATION.md): Complete, standalone 33-section engineering implementation specification detailing the Field Report Ingestion → Extraction Engine → Normalization → Candidate Retrieval → Activity Matching → Confidence Routing → Human Review → Schedule Update Generation → Safe Writeback to Primavera P6 & Microsoft Project.
+
+---
+
 ## Supported Schedule Formats
 
 1. **Primavera P6 `.xer`**: Tabular relational export parsing `%T`, `%F`, `%R`, `%E` blocks across `PROJECT`, `PROJWBS`, `TASK`, and `TASKPRED` tables.
