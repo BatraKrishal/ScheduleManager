@@ -1,266 +1,248 @@
 # Primavera Schedule Platform (ScheduleManager) & Time Agent
-## Project Knowledge & Presentation Handoff Document (PPT_HANDOFF.md)
+## Technical Presentation Handoff Document & Source of Truth (`PPT_HANDOFF.md`)
 
 **Document Name:** `docs/PPT_HANDOFF.md`  
-**Target Audience:** Presentation Authors, Solution Engineers, Technical Speakers, Project Stakeholders  
+**Target Audience:** Presentation Authors, Solution Engineers, Technical Speakers, Project Stakeholders, Hackathon Judges  
 **Baseline Codebase:** Current `ScheduleManager` Repository (`c:\Users\Gues\Desktop\sihnew\ScheduleManager`)  
-**Status:** Hardened Technical Source of Truth for Final Project Presentation / PPT Creation  
+**Status:** Complete Technical Source of Truth for Final Project Presentation (PPT) Creation  
 
 ---
 
-## Table of Contents
-1. [Project Identification](#section-1--project-identification)
-2. [Problem Statement & Domain Framing](#section-2--problem-statement--domain-framing)
-3. [Existing Workflow / Before Our System](#section-3--existing-workflow--before-our-system)
-4. [Our Solution](#section-4--our-solution)
-5. [Complete System Architecture](#section-5--complete-system-architecture)
-6. [Time Agent](#section-6--time-agent)
-7. [Artifact / Field Report Pipeline](#section-7--artifact--field-report-pipeline)
-8. [Hybrid Input Model](#section-8--hybrid-input-model)
-9. [Matching Engine](#section-9--matching-engine)
-10. [Clarification Workflow](#section-10--clarification-workflow)
-11. [Active Activity & Conversation Context](#section-11--active-activity--conversation-context)
-12. [Date Resolution](#section-12--date-resolution)
-13. [Quantity & Progress Semantics](#section-13--quantity--progress-semantics)
-14. [Schedule Update & CPM Firewall](#section-14--schedule-update--cpm-firewall)
-15. [Proposal & Confirmation Model](#section-15--proposal--confirmation-model)
-16. [Database & Domain Model](#section-16--database--domain-model)
-17. [API Layer](#section-17--api-layer)
-18. [Frontend & User Experience](#section-18--frontend--user-experience)
-19. [AI & LLM Architecture](#section-19--ai--llm-architecture)
-20. [Security & Identity Model](#section-20--security--identity-model)
-21. [Technology Stack](#section-21--technology-stack)
-22. [Schedule Import & Export](#section-22--schedule-import--export)
-23. [Monitoring & Infrastructure](#section-23--monitoring--infrastructure)
-24. [Testing & Verification](#section-24--testing--verification)
-25. [Borouge 4 Demo](#section-25--borouge-4-demo)
-26. [What is Actually Implemented](#section-26--what-is-actually-implemented)
-27. [V1 Limitations & Out of Scope](#section-27--v1-limitations--out-of-scope)
-28. [Future Extensions](#section-28--future-extensions)
-29. [Key Engineering Innovations & Differentiators](#section-29--key-engineering-innovations--differentiators)
-30. [Complete End-to-End Sequence](#section-30--complete-end-to-end-sequence)
-31. [PPT Content Map (Slide-by-Slide Guide)](#section-31--ppt-content-map)
-32. [Visual Asset Checklist](#section-32--visual-asset-checklist)
-33: [Presentation-Safe Terminology](#section-33--presentation-safe-terminology)
-34. [Fact vs Claim Control](#section-34--fact-vs-claim-control)
-35. [Final Executive Summary](#section-35--final-executive-summary)
-
----
-
-## SECTION 1 — PROJECT IDENTIFICATION
-
-* **Project Name:** `ScheduleManager` (Primavera Schedule Platform)
-* **Short Presentation Title:** **AI-Assisted Schedule Ingestion, Governed Field-Progress Matching & Time Agent**
-* **One-Line Description:** An implemented prototype platform for Primavera P6 schedule integration featuring an AI-assisted conversational Time Agent and multi-signal matching engine that converts unstructured site execution events into verified, CPM-safe schedule updates.
-* **Executive Summary:**
-  Capital construction projects suffer from persistent reporting lags of days or weeks between physical site work and master schedule updates in Primavera P6, leading to stale project baselines and contractual dispute risks. `ScheduleManager` addresses this by pairing MinIO artifact storage (with SHA-256 integrity hashing) with an LLM-assisted conversational **Time Agent** and a deterministic **5-signal candidate matching engine**. Field updates are routed through confidence gates and explicit human confirmation, updating actuals in an append-only progress ledger while strictly defending CPM network logic behind a planned-baseline protection firewall.
-* **Problem Statement Identifier:** **SIH 2026 Problem Statement: PS26122** — *AI-driven automated progress tracking and schedule updating from unstructured construction documentation and supervisor updates*.
-* **Core Presentation Clarification:** **PS26122 is the problem.** **ScheduleManager is our implemented solution platform.** **Time Agent is a major conversational interface/component within that solution, not the entire solution.**
-* **Domain:** Project Controls, Capital Construction Engineering, CPM Scheduling (Oracle Primavera P6 & Microsoft Project).
-* **Intended Users / Stakeholders:**
-  1. **Site Field Supervisors / Foremen:** Report daily work progress via natural language chat or document uploads (PDF dockets, spreadsheets) without needing P6 licenses or understanding CPM task IDs.
-  2. **Lead Project Controls Planners:** Review ambiguous or high-risk progress matches in a dedicated review cockpit, verify source excerpts, and safeguard contractual baseline dates.
-  3. **Project Directors & Claims Engineers:** Review append-only progress ledgers and source artifact evidence during billing verification or dispute analysis.
-* **Primary Objective:** Reduce the latency, transcription errors, and loss of evidence in construction schedule updating by providing a governed, auditable, and human-in-the-loop bridge between site execution reports and master CPM schedules.
-
----
-
-## SECTION 2 — PROBLEM STATEMENT & DOMAIN FRAMING
-
-### 2.1 Smart India Hackathon (SIH 2026) Problem Statement: PS26122
-* **Official Core Challenge:** Construction site progress tracking currently relies on disparate, unstructured field records (daily logs, subcontractor PDFs, delivery receipts, supervisor notes) that must be reconciled with master project schedules.
-* **Core Problem Statement Mandates:**
-  1. Heterogeneous field input ingestion (PDFs, spreadsheets, shift notes, audio/voice notes).
-  2. Extraction of activity-level actual start, end, and progress events.
-  3. Conversational / voice interface powered by Large Language Models (LLMs) for natural supervisor reporting.
-  4. Multi-signal / fuzzy entity matching linking execution events to the appropriate L5/L6 planned schedule nodes.
-  5. Confidence-based planner review routing for ambiguous or competing candidate activities.
-  6. Governed schedule and PMIS updating preserving baseline logic.
-  7. Generation of structured actual-progress datasets and audit trails.
-* **Architectural Alignment (Problem to Solution):**
+## EXECUTIVE SUMMARY & NARRATIVE ARC
 
 ```text
-PS26122
-   ↓
-Planning-to-Execution Integration Problem
-   ↓
-Our Solution: ScheduleManager
-   ├── Schedule ingestion (P6 XER, XML, CSV, XLSX)
-   ├── Field artifact ingestion (PDF, Excel, CSV, Audio in MinIO)
-   ├── ExecutionEvent normalization (Canonical structured entities)
-   ├── 5-Signal candidate matching engine (Exact, Text, WBS, Temporal, Context)
-   ├── Time Agent (Conversational site engineer & clarification dialog)
-   ├── Human clarification & review cockpit (Confidence gating)
-   ├── Governed schedule update (CPM baseline protection layer & progress ledger)
-   └── Audit trail & native P6 XER export (Downstream synchronization)
+       PLAN
+         │
+         ▼
+   Primavera P6
+         │
+         ▼
+  SCHEDULE INGESTION
+         │
+         ▼
+  FIELD EXECUTION  ──►  EXECUTION EVENT
+                               │
+                               ▼
+                       ACTIVITY MATCHING
+                               │
+                               ▼
+                           GOVERNANCE
+                               │
+                               ▼
+                        SCHEDULE UPDATE
+                               │
+                    ┌──────────┴──────────┐
+                    ▼                     ▼
+               AUDIT TRAIL          ACTUAL HISTORY
+                                          │
+                                          ▼
+                                 INSTITUTIONAL MEMORY
+                                          │
+                            ┌─────────────┼─────────────┐
+                            ▼             ▼             ▼
+                       Productivity    Duration    Benchmarks
+                            │             │             │
+                            └─────────────┼─────────────┘
+                                          │
+                                          ▼
+                                     PLAN BETTER
 ```
 
-* **Identified Pain Points in Problem Statement:**
-  * Delays of days or weeks before field accomplishments are reflected in the authoritative project schedule.
-  * Heavy manual effort required by project controls teams to decipher contractor notes and transcribe them into complex scheduling tools.
-  * Disconnect between field reality and office reporting, leading to unexpected project delays, misaligned contractor billing, and lack of contemporaneous records when claims arise.
+**ScheduleManager is an AI-assisted Primavera P6 schedule management platform that connects planned schedule data with real field execution through structured execution events, multi-signal activity matching, governed schedule updates, auditable progress history, and historical execution intelligence.**
 
-### 2.2 Our Domain Interpretation & Engineering Framing
-To rigorously address the SIH problem statement, our team framed the reconciliation challenge using industry project controls principles:
-* **The 6-Tier CPM Schedule Hierarchy:**
-  * **L1 (Milestone Schedule):** Executive summary for client leadership and financiers.
-  * **L2 (Management Summary):** Phase milestones across major project areas.
-  * **L3 (Contractual Baseline Master Schedule):** Contract-binding critical path schedule (typically 1,000–5,000 activities) governing liquidated damages and formal milestones.
-  * **L4 (Detailed Execution Schedule):** Work package / trade breakdown (5,000–50,000+ activities) where daily operations are scheduled.
-  * **L5 (Work Package / Shift Level):** Weekly work plans and trade crew allocations.
-  * **L6 (Field Daily Level):** Hourly inspections, equipment dockets, pour tickets, and turnstile logs.
-* **The Structural Disconnect:** Physical work happens at Level 6, while master schedule control resides at Level 3 and Level 4. Field information is naturally informal:
-  1. Daily progress PDFs from multiple subcontractors.
-  2. Excel cutting lists, pour logs, and delivery dockets.
-  3. Voice memos recorded by foremen on active work fronts.
-  4. WhatsApp messages and ad-hoc supervisor shift notes.
-* **Vocabulary Disconnect:** Site foremen write *"Poured 35 m3 concrete for F-204 today"*, while Primavera P6 defines the task as `CIV-1001: Substructure Concrete - Foundation F-204 Cap Beam`. Foremen rarely know or cite contractual P6 activity IDs.
-* **Human Transposition Errors:** In large master schedules with identical or repetitive activity names across multiple work fronts (e.g. 50 bridge piers or equipment foundations), planners can easily credit progress to the wrong task, creating false critical-path delays or premature milestone billings.
-* **Loss of Forensic Evidence:** Daily reports are often scattered across local folders and personal email inboxes. When delay claims or disputes arise, linking a specific percentage update back to the physical delivery ticket is difficult and time-consuming.
-* **Technical Reconciliation Formulation:** High-dimensional, unstructured execution signals (text, tables, audio) lack deterministic foreign keys to discrete CPM graph nodes (`Activity.id`). The solution requires entity resolution over candidate vertices followed by governed mutation of actuals, strictly preventing unintended changes to dependency networks.
+The system establishes a closed-loop **Planning → Execution → Verification → Learning** bridge. It does not simply capture site progress; it connects actual execution back to the schedule, preserves cryptographic evidence, and transforms verified execution data into structured **Institutional Memory** for future project planning.
 
 ---
 
-## SECTION 3 — EXISTING WORKFLOW / BEFORE OUR SYSTEM
+## TABLE OF CONTENTS
 
-Before `ScheduleManager`, project updating was entirely manual and fragmented:
+1. [Project Identification & Identity](#1-project-identification--identity)
+2. [SIH26122 Problem Statement & Domain Framing](#2-sih26122-problem-statement--domain-framing)
+3. [Existing Industry Workflow & The "Before" Gap](#3-existing-industry-workflow--the-before-gap)
+4. [ScheduleManager Solution & Core Conceptual Loop](#4-schedulemanager-solution--core-conceptual-loop)
+5. [Complete End-to-End System Architecture](#5-complete-end-to-end-system-architecture)
+6. [Architectural Firewalls & Layer Separation](#6-architectural-firewalls--layer-separation)
+7. [Authoritative Data Model (13 Production Entities)](#7-authoritative-data-model-13-production-entities)
+8. [Schedule Ingestion & Primavera P6 Interoperability](#8-schedule-ingestion--primavera-p6-interoperability)
+9. [Field Evidence Ingestion & The ExecutionEvent Pipeline](#9-field-evidence-ingestion--the-executionevent-pipeline)
+10. [Deterministic 5-Signal Activity Matching Engine](#10-deterministic-5-signal-activity-matching-engine)
+11. [Time Agent: Conversational Site Engineer](#11-time-agent-conversational-site-engineer)
+12. [Dynamic Multi-Choice Clarification](#12-dynamic-multi-choice-clarification)
+13. [Governed Bulk Progress Intent](#13-governed-bulk-progress-intent)
+14. [Conversation History vs. Institutional Memory](#14-conversation-history-vs-institutional-memory)
+15. [Schedule Update Governance & The CPM Baseline Firewall](#15-schedule-update-governance--the-cpm-baseline-firewall)
+16. [Append-Only Progress Ledger & Audit Provenance](#16-append-only-progress-ledger--audit-provenance)
+17. [Institutional Memory Engine V1 (Implemented)](#17-institutional-memory-engine-v1-implemented)
+18. [Observed Productivity Analytics & Formulae](#18-observed-productivity-analytics--formulae)
+19. [Planned vs. Actual Duration Analytics](#19-planned-vs-actual-duration-analytics)
+20. [Advisory Planning Benchmarks & Sparse Data Governance](#20-advisory-planning-benchmarks--sparse-data-governance)
+21. [Interactive Evidence Lineage Drawer & CSV Export](#21-interactive-evidence-lineage-drawer--csv-export)
+22. [Time Agent Grounded Historical Query Flow](#22-time-agent-grounded-historical-query-flow)
+23. [Frontend Cockpit & User Experience](#23-frontend-cockpit--user-experience)
+24. [Verified REST API Reference](#24-verified-rest-api-reference)
+25. [AI Architecture, LLM Roles & Credential Isolation](#25-ai-architecture-llm-roles--credential-isolation)
+26. [Technology Stack & Verified Versions](#26-technology-stack--verified-versions)
+27. [Container Topology & Infrastructure](#27-container-topology--infrastructure)
+28. [Automated Testing & Verification (74 Passed Tests)](#28-automated-testing--verification-74-passed-tests)
+29. [Benchmark Demonstration: Borouge 4 Petrochemical Expansion](#29-benchmark-demonstration-borouge-4-petrochemical-expansion)
+30. [Product Differentiation: "Not Just a RAG Chatbot"](#30-product-differentiation-not-just-a-rag-chatbot)
+31. [Implemented V1 Scope vs. Deferred Roadmap](#31-implemented-v1-scope-vs-deferred-roadmap)
+32. [Safe Presentation Claims vs. Claims NOT to Make](#32-safe-presentation-claims-vs-claims-not-to-make)
+33. [Slide-by-Slide PPT Presentation Blueprint](#33-slide-by-slide-ppt-presentation-blueprint)
+34. [Presentation-Safe Terminology Glossary](#34-presentation-safe-terminology-glossary)
+35. [Final Presentation Checklist & Delivery Notes](#35-final-presentation-checklist--delivery-notes)
 
-```
+---
+
+## 1. PROJECT IDENTIFICATION & IDENTITY
+
+* **Project Name:** `ScheduleManager`
+* **Short Presentation Title:** **AI-Assisted Schedule Ingestion, Governed Field-Progress Matching & Time Agent**
+* **Concise Product Definition:**
+  > "ScheduleManager is an AI-assisted Primavera P6 schedule management platform that connects planned schedule data with real field execution through structured execution events, multi-signal activity matching, governed schedule updates, auditable progress history, and historical execution intelligence."
+* **Core Product Identity Guardrails:**
+  * **NOT merely a chatbot:** Chat is one ingestion interface among multiple input modalities.
+  * **NOT a generic RAG wrapper:** RAG searches text; ScheduleManager performs entity resolution over schedule graphs and executes governed transactional state mutations.
+  * **NOT an unconstrained AI tool:** AI parses language and explains data; deterministic backend services execute scoring, progress math, schedule commits, and statistical analytics.
+  * **Time Agent’s Position:** Time Agent is a major conversational interface within ScheduleManager, not the entire platform.
+* **Target Users & Stakeholders:**
+  1. **Field Supervisors / Site Engineers:** Report physical accomplishments via natural language chat or document uploads without P6 licenses or knowledge of contractual activity IDs.
+  2. **Lead Project Controls Planners:** Review ambiguous progress matches in an interactive cockpit, verify source excerpts, and safeguard contractual baseline dates.
+  3. **Project Directors & Claims Engineers:** Query audit logs, inspect the append-only progress ledger, and analyze historical productivity benchmarks across completed work.
+
+---
+
+## 2. SIH26122 PROBLEM STATEMENT & DOMAIN FRAMING
+
+### 2.1 The Official SIH 2026 Problem Statement
+* **Identifier:** **SIH 2026 Problem Statement: PS26122**
+* **Domain:** Construction Project Controls, Heavy Industrial Engineering, CPM Scheduling.
+* **Core Mandate:** Automated progress tracking and schedule updating from unstructured construction documentation and supervisor updates.
+* **Critical Relationship Distinction:**
+  * **SIH26122** = The problem statement and industry challenge.
+  * **ScheduleManager** = The implemented solution platform.
+  * **Time Agent** = The conversational assistant component inside the solution.
+
+### 2.2 Industrial Scheduling Realities & Friction
+1. **The Hierarchy Disconnect:** Contractual master schedules in Primavera P6 reside at Level 3 and Level 4 (1,000–50,000+ activities), while physical work occurs at Level 6 (daily equipment dockets, pour tickets, shift logs).
+2. **Vocabulary Mismatch:** Site supervisors report in operational terms (*"Poured 35 cubic meters of concrete for F-204 today"*), whereas P6 tracks abstract contractual codes (*`CIV-1001: Substructure Concrete - Foundation F-204 Cap Beam`*). Foremen rarely know or cite contractual P6 activity IDs.
+3. **Severe Reporting Lag:** Manual transcription and multi-step approvals create delays of days or weeks before field accomplishments reach the master schedule, leading to stale baselines and delayed critical-path warnings.
+4. **Loss of Forensic Evidence:** Daily reports remain scattered across email inboxes, paper clipboards, and local drives. When contractor delay claims arise, linking a schedule percentage back to the contemporaneous field ticket is time-consuming and contentious.
+5. **Loss of Institutional Knowledge:** Once a project concludes, actual productivity rates and real installation durations are buried in static archive files, forcing estimators on subsequent projects to rely on generic rule-of-thumb guesses rather than actual historical performance.
+
+---
+
+## 3. EXISTING INDUSTRY WORKFLOW & THE "BEFORE" GAP
+
+```text
 [ Site Execution Front ]
-         │
-         ▼
-[ Daily PDF / Paper Form / Voice Note / Excel ]
-         │ (Transported via email, paper handover, or messaging apps)
-         ▼
-[ Planning Engineer's Inbox ] (Sits unreviewed for days or weeks)
-         │
-         ▼
-[ Manual Interpretation ]
-  - Planner attempts to decipher contractor shorthand
-  - Searches multi-thousand line P6 activity table by keyword
-  - Guesses which pier or foundation was poured
-         │
-         ▼
+          │
+          ▼
+[ Unstructured Field Reports ] (Daily PDFs, Excel cutting logs, WhatsApp shift notes, paper tickets)
+          │
+          ▼ (Transmitted via email or handover; sits unreviewed for days or weeks)
+[ Planning Engineer's Desk ]
+          │
+          ▼
+[ Manual Deciphering & P6 Search ]
+  - Planner attempts to decode contractor shorthand
+  - Searches 10,000+ activity schedule by keyword
+  - Guesses which foundation or pier was poured
+          │
+          ▼
 [ Manual Schedule Mutation in P6 ]
-  - Planner types percent complete and actual dates
-  - Risk of unintentionally altering planned dates or logic relationships
-  - No direct hyperlink to source evidence file
-         │
-         ▼
-[ Periodic Management Report ] (Stale before it is distributed)
+  - Directly types percent complete and actual dates
+  - High risk of accidentally overwriting planned baseline dates or relationship links
+  - Severed connection to source evidence documents
+          │
+          ▼
+[ Project Completion & Knowledge Loss ]
+  - Archive files stored on local servers
+  - Actual production rates and duration variances are permanently lost to future planners
 ```
-
-### Critical Friction Points
-1. **Unstructured Information:** Reports lack standardized formats, units, or codes.
-2. **Activity Ambiguity:** Multiple activities share identical names across different project areas (e.g., "Pour Concrete" exists in Pier 1, Pier 2, Pier 3).
-3. **Loss of Forensic Provenance:** Once typed into P6, the link between the field document and the schedule percentage is severed.
-4. **Risk of Baseline Alteration:** In standard scheduling tools, updating an activity can accidentally alter planned start dates, baseline durations, or logic predecessors if user preferences or calculation options are misconfigured.
-5. **Delayed Decision-Making:** Critical path slips are identified long after they occur on site.
 
 ---
 
-## SECTION 4 — OUR SOLUTION
+## 4. SCHEDULEMANAGER SOLUTION & CORE CONCEPTUAL LOOP
 
-`ScheduleManager` establishes a **governed, closed-loop pipeline** linking physical site execution directly to master CPM schedules.
+`ScheduleManager` replaces manual guesswork with a governed, closed-loop pipeline:
 
+```text
+PLAN (Primavera P6 XER / XML / CSV / XLSX)
+  ↓
+FIELD EXECUTION (PDFs, Spreadsheets, Shift Notes, Time Agent Chat)
+  ↓
+MATCH (Deterministic 5-Signal Candidate Engine)
+  ↓
+GOVERN (Confidence Gating, Clarification Loops & Staged Proposals)
+  ↓
+UPDATE (CPM Baseline Protection Layer & ScheduleUpdateService)
+  ↓
+AUDIT (Append-Only ActualProgressLedger & ScheduleAuditLog)
+  ↓
+INSTITUTIONAL MEMORY (Authoritative PostgreSQL Historical Execution Analytics)
+  ↓
+LEARN FROM HISTORY (Observed Productivity, Duration Variance, Advisory Benchmarks)
+  ↓
+PLAN BETTER (Evidence-Backed Planning Intelligence for Future Work)
 ```
-       PLANNED SCHEDULE (Primavera P6)
-                     │
-                     ▼
-           [ Schedule Ingestion ]
-      (Parse .XER / .XML / .CSV / .XLSX)
-                     │
-                     ▼
-      [ Canonical Schedule in Postgres ]
-                     ▲
-                     │ Governed Safe Updates
-                     │
-          [ ScheduleUpdateService ]
-          (CPM Baseline Firewall)
-                     ▲
-                     │ Confirmed Proposals
-                     │
-            [ Time Agent Engine ]
-          (Confidence & Human Review)
-                     ▲
-                     │ Scored Candidates
-                     │
-           [ 5-Signal Matcher ]
-                     ▲
-                     │ Structured Events
-                     │
-         [ ExecutionEvent Creation ]
-                     ▲
-          ┌──────────┴──────────┐
-          │                     │
-[ Conversational Chat ]  [ Field Artifact ]
-  (Supervisor Voice/Text)  (PDF / Excel in MinIO)
-```
-
-### How Our Solution Solves the Problem:
-1. **Source Evidence Retention:** Raw field artifacts are written to MinIO object storage with SHA-256 content hashes before processing, ensuring raw evidence is preserved for verification and audit.
-2. **Dual-Input Modality:** Supports both formal document uploads (PDF, Excel spreadsheets, audio recordings) and informal natural language conversations via the **Time Agent**.
-3. **Structured Event Projection:** Both paths converge into a canonical `ExecutionEvent` entity containing quantity, unit, execution date, location, discipline, and verbatim excerpts.
-4. **Deterministic 5-Signal Matching:** Evaluates activity codes, semantic text similarity, WBS hierarchy, temporal schedule windows, and location/contractor context.
-5. **Confidence-Gated Governance:**
-   * **High Confidence ($S_{\text{total}} \ge 0.85, \Delta \ge 0.15, C_{\text{ext}} \ge 0.80$):** Auto-linked.
-   * **Ambiguous / Competing Candidates:** The Time Agent asks targeted clarifying questions to the supervisor, or routes the event to the planner review cockpit.
-6. **Proposal & Confirmation Guardrail:** Updates are staged as temporary `UpdateProposal` records (5-minute TTL). Progress cannot touch the authoritative schedule without explicit human confirmation.
-7. **CPM Baseline Protection Firewall:** Updates mutate *only* actual progress fields (`percent_complete`, `actual_start`, `actual_finish`, `status`). Planned baselines, logic links, and durations are shielded from field edits.
-8. **Append-Only Auditing:** Every applied update writes to an append-only `ActualProgressLedger`, a `ScheduleAuditLog`, and a transactional `DomainOutbox` for downstream synchronization and P6 XER export.
 
 ---
 
-## SECTION 5 — COMPLETE SYSTEM ARCHITECTURE
+## 5. COMPLETE END-TO-END SYSTEM ARCHITECTURE
 
 ```mermaid
 flowchart TB
-    subgraph ClientLayer ["Client Presentation Layer"]
-        UI["Web UI Dashboard (Next.js 14 / TypeScript / Tailwind)"]
-        GANTT["Interactive Gantt Timeline (DHTMLX / SVGs)"]
-        CHAT["Time Agent Chat Drawer (TimeAgentChat.tsx)"]
-        REVIEW["Planner Review Cockpit"]
+    subgraph ClientLayer ["Client Presentation Layer (Next.js 14 / TypeScript)"]
+        UI["Web Workspace Dashboard"]
+        GANTT["Interactive Gantt Timeline (DHTMLX / SVG)"]
+        CHAT["Time Agent Chat Drawer & History"]
+        REVIEW["Lead Planner Review Cockpit"]
+        MEM_UI["Institutional Memory Workspace & Evidence Drawer"]
     end
 
-    subgraph APILayer ["Backend API Gateway (FastAPI / Port 8080)"]
-        API_PROJ["Projects & WBS Router"]
-        API_ACT["Activities & Relations Router"]
+    subgraph GatewayLayer ["Backend API Gateway (FastAPI / Port 8080)"]
+        API_SCHED["Schedule & WBS Router (/projects/*)"]
+        API_ACT["Activities & Relationships Router"]
         API_ART["Artifacts Router (/api/v1/projects/{id}/artifacts/*)"]
         API_MATCH["Matching & Review Router (/api/v1/matching/*)"]
         API_AGENT["Time Agent Router (/api/v1/projects/{id}/agent/*)"]
+        API_MEM["Institutional Memory Router (/api/v1/projects/{id}/institutional-memory/*)"]
         API_EXPORT["P6 Export & Audit Router (/api/v1/projects/{id}/*)"]
     end
 
     subgraph ServiceLayer ["Core Service & Governance Layer"]
         CREDS["CredentialResolver (Isolated Keys)"]
-        PARSER_AGENT["ConversationalParser (Intent & Extraction)"]
-        TIME_AGENT["TimeAgentService (Dialog & Proposals)"]
-        EXT_SVC["ExtractionService (PDF / Excel / Audio)"]
-        MATCH_SVC["MatchingService (5-Signal Engine)"]
-        UPD_SVC["ScheduleUpdateService (CPM Firewall)"]
-        VAL_SVC["ValidationService (Integrity Checks)"]
-        MINIO_SVC["MinIO Storage Service (S3 Client)"]
+        PARSER_AGENT["ConversationalParser (Intent, Entity & Historical Query Extraction)"]
+        TIME_AGENT["TimeAgentService (Dialog, Multi-Choice Clarification & Proposals)"]
+        EXT_SVC["ExtractionService (PDF / Excel / Audio Parsing)"]
+        MATCH_SVC["MatchingService (5-Signal Engine & Confidence Routing)"]
+        UPD_SVC["ScheduleUpdateService (CPM Firewall & Concurrency)"]
+        MEM_SVC["InstitutionalMemoryService (Historical Memory Façade)"]
+        HIST_SVC["HistoricalAnalyticsService (Deterministic SQL Analytics)"]
+        MINIO_SVC["MinIO Storage Service (S3 Client & Hashing)"]
     end
 
-    subgraph ParsingSubsystem ["Independent Parser Subsystem (Port 8001)"]
-        DOC_PARSER["document-parser Service (XER, XML, CSV, XLSX)"]
+    subgraph ParserSubsystem ["Independent Parser Subsystem (Port 8001)"]
+        DOC_PARSER["document-parser Service (P6 XER, XML, CSV, XLSX)"]
     end
 
-    subgraph ExternalAI ["External AI Services"]
-        GEMINI_AGENT["Google Gemini (Time Agent Model)"]
-        GEMINI_EXT["Google Gemini (Extraction Model)"]
+    subgraph ExternalAI ["External AI Services (Google Gemini)"]
+        GEMINI_AGENT["Google Gemini (Time Agent Model: gemini-2.5-flash)"]
+        GEMINI_EXT["Google Gemini (Extraction Model: gemini-3.5-flash)"]
     end
 
-    subgraph StorageLayer ["Data & Storage Layer"]
-        PG[(PostgreSQL 16 Database)]
+    subgraph StorageLayer ["Authoritative Storage Layer"]
+        PG[(PostgreSQL 16 Relational Database)]
         MINIO[(MinIO Object Storage - sih-artifacts)]
     end
 
-    UI --> API_PROJ
+    UI --> API_SCHED
     GANTT --> API_ACT
     CHAT --> API_AGENT
     REVIEW --> API_MATCH
     REVIEW --> API_ART
+    MEM_UI --> API_MEM
 
     API_AGENT --> TIME_AGENT
     TIME_AGENT --> CREDS
@@ -268,6 +250,11 @@ flowchart TB
     PARSER_AGENT --> GEMINI_AGENT
     TIME_AGENT --> MATCH_SVC
     TIME_AGENT --> UPD_SVC
+    TIME_AGENT --> MEM_SVC
+
+    API_MEM --> MEM_SVC
+    MEM_SVC --> HIST_SVC
+    HIST_SVC --> PG
 
     API_ART --> MINIO_SVC
     API_ART --> EXT_SVC
@@ -275,311 +262,56 @@ flowchart TB
     EXT_SVC --> GEMINI_EXT
     MINIO_SVC --> MINIO
 
-    API_PROJ --> DOC_PARSER
+    API_SCHED --> DOC_PARSER
     DOC_PARSER --> PG
 
     MATCH_SVC --> PG
-    UPD_SVC --> VAL_SVC
     UPD_SVC --> PG
 
     API_EXPORT --> PG
 ```
 
-### Architectural Subsystems Verified in Codebase:
-1. **Frontend (`frontend/`):** Next.js 14 App Router, TypeScript, Tailwind CSS, multi-tab workspace (`overview`, `wbs`, `activities`, `gantt`, `reports`, `time_agent`).
-2. **Backend API (`backend/app/api/`):** FastAPI asynchronous endpoints with full CORS, exception handlers, and Pydantic validation schemas.
-3. **Document Parser Service (`document-parser/`):** Standalone FastAPI service container parsing P6 XER, P6 XML, CSV, and XLSX formats into canonical schedule JSON.
-4. **PostgreSQL 16 (`backend/app/domain/models.py`):** Authoritative relational database containing 13 production domain models.
-5. **MinIO Object Store (`backend/app/services/minio_service.py`):** S3-compatible storage holding raw field artifacts with SHA-256 deduplication and 15-minute presigned viewing URLs.
-6. **Credential Resolver (`backend/app/services/credential_resolver.py`):** Hardened server-side authority isolating API credentials between Time Agent and ExtractionService.
-
 ---
 
-## SECTION 6 — TIME AGENT
+## 6. ARCHITECTURAL FIREWALLS & LAYER SEPARATION
 
-### What Time Agent Is
-The Time Agent is an intelligent, conversational construction execution agent built directly into the `ScheduleManager` interface. It acts as an interactive assistant that listens to supervisors, extracts structured operational data, matches it against schedule candidates, asks clarifying questions when details are ambiguous, and stages governed update proposals for human confirmation.
+The system enforces strict architectural boundaries to guarantee safety and enterprise credibility:
 
-### Why It Exists
-Field supervisors work on active, noisy construction fronts. They rarely have the time, training, or software access to navigate complex Primavera P6 schedules. The Time Agent enables supervisors to report progress in plain English (or upload daily field documents/dockets) from any mobile device or browser, translating field language into candidate CPM updates.
-
-### What Users Can Say to It (Verified Examples from Code & Specs)
-* *"We completed 35 cubic meters of concrete for F-204 today."* (Direct quantity report)
-* *"We installed 18m of cable tray CT-07 today."* (Linear installation)
-* *"SP-24-018 was erected today."* (Direct component erection)
-* *"Update this activity to 80%."* (Direct percentage progress update against active UI context)
-* *"F-204."* (Clarification answer in response to an agent question)
-
-### Supported Intents (`backend/app/schemas/agent.py`)
-1. **`INFORMATION_QUERY`:** Supervisor asks for schedule dates, activity progress, durations, or upcoming tasks.
-2. **`PROGRESS_REPORT`:** Supervisor reports physical construction work performed (quantities, components, milestones).
-3. **`PROGRESS_UPDATE_REQUEST`:** Supervisor directly requests a percentage or status update on a specific task.
-4. **`CLARIFICATION_RESPONSE`:** Supervisor provides missing details (activity code, location, quantity semantics) in response to an agent clarification question.
-5. **`ARTIFACT_SUBMISSION`:** Supervisor uploads or references a site document, inspection ticket, or delivery docket.
-
-### Architectural Principle: LLM vs. Deterministic Service Responsibilities
-
-```
-┌────────────────────────────────────────────────────────┐
-│             WHAT THE LLM (GEMINI) DOES                 │
-│  - Natural Language Intent Classification              │
-│  - Extraction of entities (Quantity, Unit, Date, Loc)  │
-│  - Natural Language Clarification Generation           │
-│  - Conversational Dialog Assistance                    │
-└──────────────────────────┬─────────────────────────────┘
-                           │ Pure Extraction / Parsing
-                           ▼
-┌────────────────────────────────────────────────────────┐
-│         WHAT DETERMINISTIC BACKEND SERVICES DO         │
-│  - Candidate Retrieval & Filtering (SQL)               │
-│  - 5-Signal Scoring Engine (Mathematical Formula)      │
-│  - Confidence Gating & Ambiguity Thresholds            │
-│  - Temporal Date Resolution (Against Data Date)        │
-│  - Quantity Math & Percentage Calculations             │
-│  - Proposal Generation & Row-Locked Concurrency        │
-│  - CPM Baseline Protection & Database Commit           │
-│  - Ledger, Audit Log & Outbox Event Emission           │
-└────────────────────────────────────────────────────────┘
-```
-**CRITICAL PRESENTATION POINT:** **The LLM cannot directly mutate the authoritative schedule.** Gemini is strictly restricted to language understanding and entity extraction; deterministic backend services govern candidate scoring, math calculations, and schedule database mutations.
-
----
-
-## SECTION 7 — ARTIFACT / FIELD REPORT PIPELINE
-
-The artifact pipeline ingests formal documents and stores them with cryptographic integrity:
-
-```mermaid
-flowchart LR
-    A[Field Artifact: PDF / Excel / Voice] --> B[MinIO Storage Bucket: sih-artifacts]
-    B --> C[Compute SHA-256 & Record Artifact in DB]
-    C --> D[ExtractionService: LLM or Rule Parser]
-    D --> E[ExecutionEvent: Verbatim Excerpt + Entities]
-    E --> F[MatchingService: 5-Signal Candidate Scoring]
-    F --> G{Confidence Gate}
-    G -- High Confidence --> H[AUTO_LINKED]
-    G -- Ambiguous --> I[PLANNER_REVIEW Cockpit]
-    H --> J[ScheduleUpdateService: Ledger & CPM Update]
-    I -- Planner Approves --> J
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. COGNITIVE LAYER (Google Gemini via ConversationalParser)            │
+│    - Intent classification & entity extraction                         │
+│    - Conversational clarification question generation                  │
+│    - Grounded natural language explanations                            │
+│    - RESTRICTION: No SQL queries, no math, no database writes         │
+├────────────────────────────────────────────────────────────────────────┤
+│ 2. MATCHING LAYER (MatchingService)                                    │
+│    - Deterministic 5-signal scoring formula                            │
+│    - Confidence routing: AUTO_LINK vs. IN_REVIEW vs. UNMATCHED         │
+│    - RESTRICTION: evaluate_event_for_agent() does not mutate DB        │
+├────────────────────────────────────────────────────────────────────────┤
+│ 3. GOVERNANCE LAYER (UpdateProposal & ReviewCockpit)                   │
+│    - 5-minute TTL proposal staging with baseline activity snapshot     │
+│    - Dynamic multi-choice candidate selection                          │
+│    - Human confirmation required before state transition               │
+├────────────────────────────────────────────────────────────────────────┤
+│ 4. AUTHORITY LAYER (ScheduleUpdateService & PostgreSQL 16)             │
+│    - Single authoritative mutation gate for schedule actuals           │
+│    - CPM Baseline Firewall (shields planned dates & network logic)     │
+│    - Atomic emission of ProgressLedger, AuditLog & DomainOutbox        │
+├────────────────────────────────────────────────────────────────────────┤
+│ 5. HISTORICAL INTELLIGENCE LAYER (HistoricalAnalyticsService)          │
+│    - Pure PostgreSQL queries over verified past execution records      │
+│    - Deterministic observed productivity, duration variance & P50/P80  │
+│    - RESTRICTION: Zero fabricated benchmarks; strict sample size gates │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Supported Formats Verified in Codebase:
-* **Digital & Scanned PDF (`.pdf`):** Processed via `pypdf` text extraction, then parsed with Google Gemini structured JSON extraction.
-* **Spreadsheets (`.xlsx`, `.xls`, `.csv`):** Processed via `openpyxl` / `csv`, extracting contractor quantity logs, dates, and pour lists.
-* **Worker Voice Memos (`.m4a`, `.mp3`, `.wav`):** Audio binary is securely saved in MinIO with SHA-256 hashing; placeholder event metadata is recorded (Speech-to-Text transcription is slated for V1.1).
-* **Text / Shift Notes (`.txt`):** Direct UTF-8 ingestion and entity extraction.
-
 ---
 
-## SECTION 8 — HYBRID INPUT MODEL
+## 7. AUTHORITATIVE DATA MODEL (13 PRODUCTION ENTITIES)
 
-`ScheduleManager` supports three distinct source modalities in `ExecutionEvent.source_type`:
-
-| Source Type | Description | Provenance Stored | Schema Handling |
-| :--- | :--- | :--- | :--- |
-| **`ARTIFACT`** | Generated from uploaded files (PDF, spreadsheet, audio). | `artifact_id`, `storage_key`, `file_sha256`, `page_number`, `bounding_box`. | Mandatory artifact metadata; `conversation_id` is null. |
-| **`CONVERSATION`** | Generated from direct supervisor chat messages. | `conversation_id`, `message_id`. | Artifact fields (`artifact_id`, `storage_key`, `page_number`) are explicitly `nullable=True`. |
-| **`HYBRID`** | Generated when a supervisor uploads a document attachment inside a chat thread or enriches a document event via conversation. | `artifact_id`, `storage_key`, `file_sha256`, `conversation_id`, `message_id`. | Both artifact provenance and conversational session tracking are populated simultaneously. |
-
-**Convergence:** Regardless of whether work is reported via an uploaded PDF or a chat message, both paths produce an identical `ExecutionEvent` schema and enter the same downstream matching and schedule-update pipeline.
-
----
-
-## SECTION 9 — MATCHING ENGINE
-
-The `MatchingService` (`backend/app/services/matching_service.py`) performs entity resolution between field execution events and schedule activities.
-
-### 1. Candidate Retrieval
-* Filters activities within the target project where `status != 'COMPLETED'`.
-* Applies a temporal window: `planned_start <= execution_date + 30 days` and `planned_finish >= execution_date - 30 days`.
-* If temporal filtering yields zero activities, it safely falls back to all active activities in the project.
-
-### 2. The 5-Signal Scoring Engine
-
-The total match score $S_{\text{total}} \in [0.0, 1.0]$ combines 5 independent signals:
-
-$$S_{\text{total}} = w_{\text{id}} S_{\text{id}} + w_{\text{text}} S_{\text{text}} + w_{\text{wbs}} S_{\text{wbs}} + w_{\text{temp}} S_{\text{temp}} + w_{\text{context}} S_{\text{context}}$$
-
-| Signal | Name | Description | Scoring Logic in Code |
-| :--- | :--- | :--- | :--- |
-| **$S_{\text{id}}$** | Exact Code Match | Explicit activity code cited in field report or text. | $1.0$ if `reported_activity_code == activity_code` or activity code appears verbatim in excerpt; otherwise $0.0$. |
-| **$S_{\text{text}}$** | Text Similarity | Token-overlap and semantic similarity between narrative and activity name. | Token Jaccard + substring ratio over description, verbatim excerpt, and activity reference. |
-| **$S_{\text{wbs}}$** | WBS & Hierarchy | Alignment between event WBS hint / discipline and activity WBS node. | $1.0$ if WBS hint matches WBS name; $0.95$ if location matches WBS; $0.85$ if discipline matches; $0.50$–$0.90$ based on text score. |
-| **$S_{\text{temp}}$** | Temporal Compatibility | Whether execution date falls within activity planned start/finish. | $1.0$ if within planned window; Gaussian decay penalty for dates outside the window. |
-| **$S_{\text{context}}$** | Contextual Alignment | Matching physical location and subcontractor name. | $1.0$ if location matches activity name/location code; $+0.2$ bonus if subcontractor matches. |
-
-### 3. Configured Scoring Weights
-* **When Exact Code is Present ($S_{\text{id}} = 1.0$):**
-  $$S_{\text{total}} = \max\left(0.95, 0.40 S_{\text{id}} + 0.30 S_{\text{text}} + 0.15 S_{\text{wbs}} + 0.10 S_{\text{temp}} + 0.05 S_{\text{context}}\right)$$
-  *(Guarantees an exact code match always scores $\ge 0.95$)*
-* **When No Code is Present ($S_{\text{id}} = 0.0$):**
-  $$S_{\text{total}} = 0.45 S_{\text{text}} + 0.25 S_{\text{wbs}} + 0.15 S_{\text{temp}} + 0.15 S_{\text{context}}$$
-
-### 4. Confidence Routing Rules
-Candidates are sorted descending by $S_{\text{total}}$. The margin delta $\Delta = S_{\text{top}} - S_{\text{second}}$ measures separation:
-* **`AUTO_LINK` Threshold:**
-  $$S_{\text{total}} \ge 0.85 \quad \wedge \quad \Delta \ge 0.15 \quad \wedge \quad C_{\text{ext}} \ge 0.80$$
-  *(Score $\ge 85\%$, margin over runner-up $\ge 15\%$, extraction confidence $\ge 80\%$)*
-* **`PLANNER_REVIEW` Routing:**
-  Triggered if $S_{\text{total}} < 0.85$, or $\Delta < 0.15$ (competing ambiguity), or $C_{\text{ext}} < 0.80$.
-
-### 5. Safe Non-Finalizing Evaluation for Time Agent
-Standard batch matching (`evaluate_event()`) mutates the database event status to `AUTO_LINKED` or `IN_REVIEW`. For the Time Agent, `MatchingService.evaluate_event_for_agent()` was introduced:
-* Evaluates candidates, computes scores, and determines routing.
-* **Does NOT mutate `event.status` and does NOT call `db.commit()`**.
-* Allows repeated evaluation during conversational clarification without premature state finalization.
-
----
-
-## SECTION 10 — CLARIFICATION WORKFLOW
-
-When an event is ambiguous (e.g. multiple competing foundation pours), the Time Agent does not guess. It initiates a structured clarification loop:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Supervisor
-    participant Chat as TimeAgentChat (UI)
-    participant Agent as TimeAgentService
-    participant Matcher as MatchingService
-    participant DB as PostgreSQL
-
-    Supervisor->>Chat: "We poured 35 cubic meters of concrete today."
-    Chat->>Agent: process_message(text)
-    Agent->>DB: Create ExecutionEvent (active_event_id)
-    Agent->>Matcher: evaluate_event_for_agent()
-    Matcher-->>Agent: Competing Candidates: CIV-1001 (F-204) & CIV-1002 (F-205) [Delta < 0.15]
-    Agent-->>Chat: ActionCard (CLARIFICATION_REQUIRED) + Option Buttons [CIV-1001, CIV-1002]
-    Chat-->>Supervisor: "Which foundation was poured today: F-204 or F-205?"
-
-    Supervisor->>Chat: Clicks "F-204" or types "F-204."
-    Chat->>Agent: process_message(text="F-204", active_event_id)
-    Agent->>DB: Enrich existing ExecutionEvent with location="F-204"
-    Agent->>Matcher: evaluate_event_for_agent()
-    Matcher-->>Agent: Winner: CIV-1001 (Score: 0.95, Delta: 0.45) -> AUTO_LINK
-    Agent->>DB: Stage UpdateProposal (CIV-1001, 25% progress, TTL: 5m)
-    Agent-->>Chat: ActionCard (PROPOSAL_STAGED) + [Confirm & Apply] Button
-```
-
-### Clarification Invariants:
-1. **Same Logical Event Enrichment:** Subsequent turns update the *same* `ExecutionEvent` record (tracked via `Conversation.active_event_id`) rather than spawning orphaned duplicate events.
-2. **Maximum Turn Bound:** `Conversation.clarification_turns` is capped at **3 turns**. If ambiguity remains unresolved after 3 turns, the agent escalates the event to `PLANNER_REVIEW` in the main cockpit.
-3. **No Unchecked Guessing:** The agent never silently picks a candidate activity when $\Delta < 0.15$.
-
----
-
-## SECTION 11 — ACTIVE ACTIVITY & CONVERSATION CONTEXT
-
-### UI Context Binding
-When a user opens the Time Agent chat from the Gantt chart or Activities table, the frontend sends an optional `active_activity_id` anchor.
-
-### Critical Safety Invariant: Context is NOT Evidence
-* An active UI selection is **conversational context, NOT forensic evidence**.
-* The presence of `active_activity_id` does **not** grant an exact match score ($S_{\text{id}} = 1.0$).
-* **Precedence Rule:** If a supervisor explicitly writes an activity code (e.g. *"Poured F-205 today"*) while viewing activity `F-204` on screen, the **explicitly reported text takes precedence** over the UI anchor.
-* The anchor is only used to resolve relative pronouns (e.g., *"Update this activity to 80%"* or *"Completed today"*).
-
----
-
-## SECTION 12 — DATE RESOLUTION
-
-Schedule updating requires strict temporal discipline:
-1. **Explicit ISO Date:** Dates in `YYYY-MM-DD` format (e.g. `2024-06-01`) resolve directly.
-2. **Relative Day Terms ("today", "yesterday"):**
-   * Resolved against `Project.data_date` (the schedule cutoff date) if present.
-   * If `project.data_date` is not set, falls back to current UTC date.
-   * **Why this matters:** When demoing or updating an archive project from 2024, "today" must resolve to the project's data date (e.g., June 1, 2024), **not** the physical calendar year of the machine running the code.
-3. **Weekday References ("on Monday"):** Resolves to the most recent prior occurrence relative to `project.data_date`.
-4. **Deterministic Resolution:** Date parsing is handled by deterministic Python code in `ConversationalParser.resolve_temporal_date()`, avoiding LLM date errors.
-
----
-
-## SECTION 13 — QUANTITY & PROGRESS SEMANTICS
-
-The `ScheduleUpdateService` implements strict mathematical progress calculation based on activity physical quantities:
-
-### 1. Incremental vs. Cumulative Semantics
-* **`INCREMENTAL` (Default for daily shift reports):**
-  $$\text{New Installed} = \text{Previous Installed} + \Delta Q$$
-  $$\text{New } \% = \min\left(100.0, \text{Previous } \% + \left(\frac{\Delta Q}{Q_{\text{planned}}}\right) \times 100\right)$$
-* **`CUMULATIVE` (Total progress to date):**
-  $$\Delta Q = Q_{\text{reported}} - Q_{\text{previous}}$$
-  $$\text{New } \% = \min\left(100.0, \left(\frac{Q_{\text{reported}}}{Q_{\text{planned}}}\right) \times 100\right)$$
-
-### 2. Validation & Safety Invariants:
-* **Negative Delta Rejection:** If reported cumulative quantity is less than previously recorded installed quantity ($Q_{\text{cum}} < Q_{\text{prev}}$), the update is rejected (`ValidationException`). Site progress cannot go backwards.
-* **Equal Quantity Handling:** If $Q_{\text{cum}} == Q_{\text{prev}}$, incremental progress is $0.0$ and percentage remains unchanged.
-* **Quantity Overrun / Capping:** If installed quantity exceeds planned quantity ($Q_{\text{installed}} > Q_{\text{planned}}$), progress caps cleanly at $100.0\%$ (cannot exceed 100%).
-
-### Borouge 4 Demo Example:
-* Planned Quantity ($Q_{\text{planned}}$): $140.0\text{ m}^3$
-* Baseline Progress: $0.0\%$ ($0.0\text{ m}^3$ installed)
-* Reported Incremental Pour: $35.0\text{ m}^3$
-* Resulting Progress Delta: $\left(\frac{35.0}{140.0}\right) \times 100 = \mathbf{25.0\%}$
-* Resulting Status: `IN_PROGRESS`
-
----
-
-## SECTION 14 — SCHEDULE UPDATE & CPM FIREWALL
-
-### The CPM Baseline Protection Layer
-In critical path scheduling, unvalidated updates can corrupt planned project logic. The **CPM Firewall** is an architectural barrier enforced by `ScheduleUpdateService`:
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                   THE CPM BASELINE FIREWALL                      │
-├─────────────────────────────────┬────────────────────────────────┤
-│ MUTABLE (Actual Progress Fields) │ IMMUTABLE (Contract Baselines) │
-├─────────────────────────────────┼────────────────────────────────┤
-│  percent_complete               │  planned_start                 │
-│  actual_start                   │  planned_finish                │
-│  actual_finish                  │  original_duration             │
-│  status (IN_PROGRESS/COMPLETED) │  calendar                      │
-│                                 │  predecessor/successor links   │
-│                                 │  relationship lag              │
-└─────────────────────────────────┴────────────────────────────────┘
-```
-**RULE:** **Schedule updates are constrained by a CPM baseline protection layer.** Field updates can alter only actual progress fields (`percent_complete`, `actual_start`, `actual_finish`, `status`). Planned start dates, planned finish dates, durations, and logic links are shielded from field edits.
-
-### Governed Mutation Steps (Executed in a Single Database Transaction):
-1. **Idempotency Check:** Queries `ActualProgressLedger` for `(activity_id, execution_event_id)`. If present, immediately aborts duplicate write.
-2. **Progress Math:** Calculates new bounded cumulative percent complete ($0.0 \le \% \le 100.0$).
-3. **Actual Date Setting:** Sets `actual_start` on first progress; sets `actual_finish` when reaching $100.0\%$.
-4. **Append-Only Ledger Entry:** Writes to `ActualProgressLedger`.
-5. **Audit Logging:** Writes previous state and new state JSON to `ScheduleAuditLog`.
-6. **Outbox Emission:** Inserts `SCHEDULE_PROGRESS_UPDATED` event into `DomainOutbox`.
-7. **Event Status Update:** Transitions `ExecutionEvent.status = 'APPLIED'`.
-
----
-
-## SECTION 15 — PROPOSAL & CONFIRMATION MODEL
-
-To ensure that neither AI extractions nor supervisor typos directly alter the master schedule, updates are staged as **UpdateProposals** requiring human confirmation.
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: Agent Stages Proposal
-    PENDING --> CONFIRMED: Supervisor Clicks [Confirm & Apply]
-    CONFIRMED --> CONSUMED: ScheduleUpdateService Executes
-    PENDING --> REJECTED: User Clicks [Reject]
-    PENDING --> EXPIRED: TTL Expires (5 Minutes)
-    CONSUMED --> [*]
-    REJECTED --> [*]
-    EXPIRED --> [*]
-```
-
-### Proposal Security & Concurrency Controls
-1. **5-Minute TTL:** Staged proposals expire after 300 seconds (`expires_at`), preventing stale updates from lingering.
-2. **Baseline Snapshot:** Every proposal stores `baseline_activity_state` JSON (the activity's exact percent, status, and dates at the moment the proposal was generated).
-3. **Stale Proposal Conflict Detection:** At confirmation time, the engine compares the activity's *current* state against the snapshot. If another engineer updated the activity in the interim, the proposal is rejected (`HTTP 409 Conflict`).
-4. **Row-Level Concurrency Locking (`SELECT FOR UPDATE`):** When `/confirm` is called, the proposal row is locked at the database level. Concurrent requests cannot execute the same proposal twice.
-5. **Caller Transaction Ownership:** Proposal status transition to `CONSUMED` and schedule update execution occur in the **same atomic database transaction** (`commit=False` parameter pattern).
-
----
-
-## SECTION 16 — DATABASE & DOMAIN MODEL
-
-The relational schema in PostgreSQL 16 contains **13 production models**:
+The authoritative relational schema in PostgreSQL 16 contains **exactly 13 domain models** (`backend/app/domain/models.py`):
 
 ```mermaid
 erDiagram
@@ -610,554 +342,850 @@ erDiagram
     EXECUTION_EVENT ||--o{ UPDATE_PROPOSAL : generates
 ```
 
-### Entity Reference Table
+### Verified Domain Entities Reference
 
-| Entity | Table Name | Purpose | Critical Fields |
+| Entity | Table Name | Purpose | Key Fields |
 | :--- | :--- | :--- | :--- |
-| **`Project`** | `projects` | Master project schedule container. | `project_code`, `data_date`, `planned_start`, `planned_finish`. |
-| **`WBSNode`** | `wbs` | Hierarchical Work Breakdown Structure tree. | `code`, `name`, `parent_id`, `project_id`. |
+| **`Project`** | `projects` | Master project schedule container. | `project_code`, `name`, `data_date`, `planned_start`, `planned_finish`. |
+| **`WBSNode`** | `wbs` | Hierarchical Work Breakdown Structure. | `code`, `name`, `parent_id`, `project_id`. |
 | **`Activity`** | `activities` | CPM schedule task (leaf node). | `activity_code`, `name`, `status`, `planned_start/finish`, `actual_start/finish`, `percent_complete`, `planned_quantity`. |
-| **`ActivityRelationship`** | `relationships` | CPM logic link between activities. | `predecessor_id`, `successor_id`, `relationship_type` (FS/SS/FF/SF), `lag`. |
-| **`Artifact`** | `artifacts` | Raw document metadata stored in MinIO with SHA-256 content hashes. | `storage_key`, `sha256`, `mime_type`, `size_bytes`, `extraction_status`. |
-| **`ExecutionEvent`** | `execution_events` | Discrete site execution work item. | `verbatim_excerpt`, `quantity`, `unit`, `execution_date`, `location`, `status`, `source_type` (ARTIFACT/CONVERSATION/HYBRID). |
-| **`ReviewDecision`** | `review_decisions` | Planner review sign-off for ambiguous events. | `decision` (APPROVED/REJECTED/REASSIGNED), `reviewer_id`, `notes`. |
-| **`ActualProgressLedger`** | `actual_progress_ledger` | Append-only progress ledger by application design. | `installed_quantity`, `incremental_percent`, `cumulative_percent`, composite unique key `(activity_id, execution_event_id)`. |
-| **`ScheduleAuditLog`** | `schedule_audit_log` | Append-only audit trail recording before/after state diffs for all changes. | `previous_state` (JSON), `new_state` (JSON), `user_id`, `timestamp`. |
-| **`DomainOutbox`** | `domain_outbox` | Transactional outbox for event streaming. | `event_type`, `aggregate_id`, `payload` (JSON), `status` (PENDING). |
-| **`Conversation`** | `conversations` | Time Agent chat session container. | `project_id`, `user_id`, `active_activity_id`, `active_event_id`, `clarification_turns`, `status`. |
-| **`ConversationMessage`** | `conversation_messages` | Individual chat turns in conversation. | `sender` (USER/AGENT/SYSTEM), `content`, `message_metadata` (JSON). |
-| **`UpdateProposal`** | `update_proposals` | Staged schedule update awaiting confirmation (5m TTL). | `proposed_state` (JSON), `baseline_activity_state` (JSON), `status` (PENDING/CONFIRMED/CONSUMED/EXPIRED), `expires_at`. |
+| **`ActivityRelationship`** | `relationships` | CPM network logic dependency. | `predecessor_id`, `successor_id`, `relationship_type` (FS/SS/FF/SF), `lag`. |
+| **`Artifact`** | `artifacts` | Field document metadata in MinIO. | `storage_key`, `file_sha256`, `mime_type`, `size_bytes`, `extraction_status`. |
+| **`ExecutionEvent`** | `execution_events` | Discrete site work item. | `verbatim_excerpt`, `quantity`, `unit`, `execution_date`, `location`, `status`, `source_type` (`ARTIFACT`/`CONVERSATION`/`HYBRID`). |
+| **`ReviewDecision`** | `review_decisions` | Planner review sign-off. | `decision` (`APPROVED`/`REJECTED`/`REASSIGNED`), `reviewer_id`, `notes`. |
+| **`ActualProgressLedger`** | `actual_progress_ledger` | Append-only progress ledger. | `installed_quantity`, `incremental_percent`, `cumulative_percent`, unique `(activity_id, execution_event_id)`. |
+| **`ScheduleAuditLog`** | `schedule_audit_log` | Complete state diff audit trail. | `previous_state` (JSON), `new_state` (JSON), `user_id`, `timestamp`. |
+| **`DomainOutbox`** | `domain_outbox` | Transactional outbox event queue. | `event_type`, `aggregate_id`, `payload` (JSON), `status` (`PENDING`). |
+| **`Conversation`** | `conversations` | Project-scoped chat session. | `project_id`, `user_id`, `title`, `active_activity_id`, `active_event_id`, `clarification_turns`. |
+| **`ConversationMessage`** | `conversation_messages` | Chat message turn. | `sender` (`USER`/`AGENT`/`SYSTEM`), `content`, `message_metadata` (JSON). |
+| **`UpdateProposal`** | `update_proposals` | Staged update awaiting confirmation. | `proposed_state` (JSON), `baseline_activity_state` (JSON), `status` (`PENDING`/`CONFIRMED`/`CONSUMED`/`EXPIRED`), `expires_at`. |
+
+> **CRITICAL ARCHITECTURAL FACT FOR PRESENTATION:**  
+> **No separate `InstitutionalMemory` table exists in PostgreSQL.** Institutional Memory V1 is computed dynamically and deterministically by `HistoricalAnalyticsService` from the authoritative relational execution tables (`execution_events`, `actual_progress_ledger`, `activities`, `schedule_audit_log`). There are **no duplicate memory tables, no embeddings, and no vector stores in V1**.
 
 ---
 
-## SECTION 17 — API LAYER
+## 8. SCHEDULE INGESTION & PRIMAVERA P6 INTEROPERABILITY
 
-The backend exposes a comprehensive, RESTful FastAPI interface across modular routers:
+### Supported Schedule Formats
+* **Oracle Primavera P6 `.xer`:** Parses `%T`, `%F`, `%R`, `%E` record blocks across `PROJECT`, `PROJWBS`, `TASK`, and `TASKPRED` tables.
+* **Oracle Primavera P6 `.xml`:** Hierarchical XML parser extracting projects, WBS branches, activities, and logic relationships.
+* **Tabular Schedule Imports (`.csv`, `.xlsx`):** Header-aware tabular parsers supporting standard project controls column aliases.
 
-### 1. Time Agent Router (`backend/app/api/agent.py`)
-* `POST /api/v1/projects/{project_id}/agent/conversations`: Initializes or resumes an active conversation session.
-* `GET /api/v1/projects/{project_id}/agent/conversations/{conversation_id}`: Fetches conversation details and message history.
-* `POST /api/v1/projects/{project_id}/agent/conversations/{conversation_id}/messages`: Submits supervisor chat turn; returns agent response and action card.
-* `POST /api/v1/projects/{project_id}/agent/conversations/{conversation_id}/attachments`: Uploads field report documents (PDF, Excel, CSV) or audio files within chat; returns hybrid execution event.
-* `POST /api/v1/projects/{project_id}/agent/conversations/{conversation_id}/confirm`: Atomically locks, validates, and applies a staged proposal (or rejects it).
-
-### 2. Schedule Import & Management Routers (`backend/app/api/projects.py`, `wbs.py`, `activities.py`, `relationships.py`)
-* `POST /projects/import`: Multi-format file upload (`.xer`, `.xml`, `.csv`, `.xlsx`); orchestrates parsing and relational DB population.
-* `GET /projects`: Lists all imported projects with aggregate activity and WBS counts.
-* `GET /projects/{project_id}`: Detailed project metadata.
-* `DELETE /projects/{project_id}`: Deletes a project and cascades cleanup across associated schedule records.
-* `GET /projects/{project_id}/wbs`: Lists WBS nodes for a project.
-* `GET /projects/{project_id}/wbs/tree`: Hierarchical WBS tree with nested child nodes and activity counts.
-* `GET /projects/{project_id}/activities`: Filtered, sorted, and paginated activity table.
-* `GET /activities/{activity_id}`: Details for a specific activity.
-* `PATCH /activities/{activity_id}`: Governed activity update with percent bounds validation.
-* `GET /projects/{project_id}/relationships`: Network predecessor/successor logic links.
-
-### 3. Artifact & Review Routers (`backend/app/api/artifacts.py`, `matching.py`, `review.py`)
-* `POST /api/v1/projects/{project_id}/artifacts/upload`: Uploads raw field artifacts to MinIO; records SHA-256 hash in PostgreSQL.
-* `GET /api/v1/projects/{project_id}/artifacts`: Lists artifacts associated with a project.
-* `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}`: Retrieves metadata for a specific artifact.
-* `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}/url`: Generates temporary presigned MinIO S3 viewing URL (15-minute expiry).
-* `GET /api/v1/artifacts/download`: Download proxy for stored artifact bytes.
-* `POST /api/v1/matching/evaluate`: Triggers 5-signal candidate evaluation and confidence routing on execution events.
-* `GET /api/v1/review/queue`: Lists pending ambiguous events requiring human planner review.
-* `POST /api/v1/review/decisions`: Planner review cockpit decision recording (Approve / Reject).
-
-### 4. Export & Audit Routers (`backend/app/api/export.py`)
-* `GET /api/v1/projects/{project_id}/audit-trail`: Fetches comprehensive change history from `ScheduleAuditLog`.
-* `GET /api/v1/projects/{project_id}/export/xer`: Generates and streams an Oracle Primavera P6 XER file reflecting verified progress updates across supported core tables.
-
----
-
-## SECTION 18 — FRONTEND / USER EXPERIENCE
-
-The frontend (`frontend/`) is a Next.js 14 web application providing a unified project cockpit:
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        SCHEDULEMANAGER COCKPIT                         │
-├───────────┬──────────────┬──────────────┬──────────┬─────────┬─────────┤
-│ Overview  │ WBS Explorer │  Activities  │  Gantt   │ Reports │ Time Ag.│
-├───────────┴──────────────┴──────────────┴──────────┴─────────┴─────────┤
-│                                                                        │
-│   [ GANTT CHART VIEW / TIMELINE ]                                      │
-│   ========================================================             │
-│   CIV-1001: Foundation Pour F-204       [==== 25% ====]                │
-│   CIV-1002: Foundation Pour F-205       [ 0%          ]                │
-│                                                                        │
-│ ┌────────────────────────────────────────────────────────────────────┐ │
-│ │ TIME AGENT SLIDE-OVER DRAWER (TimeAgentChat.tsx)                   │ │
-│ │                                                                    │ │
-│ │ [Agent]: What work was completed on site today?                    │ │
-│ │ [User] : We poured 35 m3 concrete today.                           │ │
-│ │ [Agent]: Did this apply to F-204 or F-205?                         │ │
-│ │          (Option Button: [F-204]) (Option Button: [F-205])         │ │
-│ │ [User] : [Clicks F-204]                                            │ │
-│ │ [Agent]: Staged Update Proposal:                                   │ │
-│ │          Activity: CIV-1001 (Foundation F-204)                     │ │
-│ │          Delta   : +35 m3 (0% -> 25%)                              │ │
-│ │          [Confirm & Apply] [Reject]                                │ │
-│ │ [User] : [Clicks Confirm & Apply]                                  │ │
-│ │ [Agent]: Update Applied! Gantt refreshed.                          │ │
-│ └────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### Key Frontend Features:
-1. **Embedded & Global Time Agent Drawer:** Available both as a dedicated full-page tab and as a persistent floating slide-out drawer accessible across Gantt, WBS, and Activity views.
-2. **Interactive Action Cards:** Proposals render with current percent, proposed percent, quantity delta, execution date, and confidence badges.
-3. **Clarification Quick-Buttons:** Renders selectable candidate buttons during ambiguity, minimizing typing for site supervisors on mobile devices.
-4. **Live Gantt Refresh:** Calling proposal confirmation automatically refreshes the DHTMLX Gantt timeline to reflect newly applied progress immediately.
-
----
-
-## SECTION 19 — AI / LLM ARCHITECTURE
-
-### Provider & Model Configuration
-* **LLM Provider:** Google Gemini API.
-* **Time Agent Model (`TIME_AGENT_LLM_MODEL`):** `gemini-2.5-flash` (Optimized for low-latency conversational classification, JSON extraction, and dialog generation).
-* **Extraction Model (`EXTRACTION_LLM_MODEL`):** `gemini-3.5-flash` (Optimized for deep document parsing, complex tabular analysis, and multi-event extraction).
-
-### Hardened Credential Isolation (`CredentialResolver`)
-The repository enforces independent server-side credentials:
-* `TIME_AGENT_GEMINI_API_KEY`: Dedicated key used exclusively by the conversational Time Agent.
-* `EXTRACTION_GEMINI_API_KEY`: Dedicated key used exclusively by the document extraction service.
-* **Legacy Fallback Governance:** Shared `GEMINI_API_KEY` is maintained strictly as a temporary backward-compatibility mechanism.
-* **Production Protection:** In production (`ENVIRONMENT=production`), fallback to `GEMINI_API_KEY` is **strictly disabled** unless explicitly enabled via `ALLOW_LEGACY_GEMINI_FALLBACK=true`.
-* **Zero Secret Leakage:** Gemini keys are transmitted via `x-goog-api-key` HTTP headers (never in URL query strings) and are never logged or exposed in client responses.
-
----
-
-## SECTION 20 — SECURITY / IDENTITY MODEL
-
-### Current V1 Identity Architecture (Accurate Representation)
-* **Prototype / Trusted Caller Identity:** The current V1 implementation identifies actors via request headers (`X-User-ID`, `X-User-Role`) and form parameters (`uploaded_by`, `user_id`, `reviewer_id`).
-* **Default Actors:**
-  * Field Supervisor: `site-supervisor` / `supervisor-salem`
-  * Project Planner: `planner-user`
-* **Project Scope Authorization:** Endpoints validate that all requested activities, events, and proposals strictly belong to the specified `project_id`. Cross-project mutation attempts return `HTTP 404 / 422`.
-* **Honest Representation for PPT:** V1 implements a **functional prototype authorization boundary** suitable for testing, evaluation, and controlled demonstrations. Production OAuth2/OIDC/JWT authentication is a documented future roadmap capability.
-
----
-
-## SECTION 21 — TECHNOLOGY STACK
-
-| Layer | Technology | Version / Spec | Role in ScheduleManager |
-| :--- | :--- | :--- | :--- |
-| **Frontend Framework** | Next.js | 14.1.0 | React application framework hosting the project controls dashboard. |
-| **Language (Frontend)**| TypeScript | 5.3.3 | Type-safe UI components, API clients, and domain interfaces. |
-| **Styling** | Tailwind CSS | 3.4.1 | Responsive, modern project controls UI styling. |
-| **Timeline View** | DHTMLX Gantt / SVG | Latest | Interactive CPM Gantt chart visualization with logic links. |
-| **Backend Framework** | FastAPI | 0.110.0 | High-performance asynchronous REST API framework. |
-| **Language (Backend)** | Python | 3.12 | Core backend business logic, math calculations, and AI orchestration. |
-| **ORM / Database** | SQLAlchemy | 2.0.28 | Object-relational mapping, relationship cascades, and unit-of-work transactions. |
-| **Database** | PostgreSQL | 16-alpine | Authoritative relational database for projects, activities, and ledgers. |
-| **Object Storage** | MinIO | Latest | S3-compatible object store for raw field artifact retention with SHA-256 hashing. |
-| **AI / LLM** | Google Gemini | 2.5-flash / 3.5-flash | Natural language intent classification and document field extraction. |
-| **HTTP Client** | HTTPX | 0.27.0 | Resilient HTTP client for inter-service and Gemini API communication. |
-| **PDF Processing** | PyPDF | Latest | Document parsing and page text extraction for site reports. |
-| **Spreadsheet Engine** | openpyxl / csv | Latest | Multi-sheet Excel workbook and CSV progress log parsing. |
-| **Container Architecture**| Docker & Compose | Compose v2 | Deployment with five containers/services (`frontend`, `backend`, `document-parser`, `postgres`, `minio`). |
-| **Testing** | Pytest | 9.1.1 | Automated unit, integration, and E2E test suite. |
-
----
-
-## SECTION 22 — SCHEDULE IMPORT & EXPORT
-
-### Supported Formats & Normalization
-The `document-parser` service normalizes incoming schedule files into a unified canonical JSON schema:
-1. **Primavera P6 `.xer`:** Parses `%T`, `%F`, `%R`, `%E` blocks across `PROJECT`, `PROJWBS`, `TASK`, and `TASKPRED` tables.
-2. **Primavera P6 `.xml`:** Hierarchical XML schema parsing `<Project>`, `<WBS>`, `<Activity>`, and `<Relationship>`.
-3. **Primavera `.csv`:** Header-aware CSV parser mapping standard P6 column aliases.
-4. **Excel `.xlsx`:** Multi-sheet spreadsheet parser supporting tabular schedule rows.
-
-### Roundtrip P6 XER Export (`backend/app/api/export.py`)
-`ScheduleManager` can export its database state back into a native, syntactically valid Oracle Primavera P6 XER file:
+### Roundtrip P6 XER Export (`GET /api/v1/projects/{id}/export/xer`)
+`ScheduleManager` can serialize its PostgreSQL database state back into a native, syntactically valid Oracle Primavera P6 XER file:
 * **Exported Tables:** `%T PROJECT`, `%T PROJWBS`, `%T TASK`, `%T TASKPRED`.
-* **Progress Fidelity:** Successfully preserves updated `status_code`, `act_start_date`, `act_end_date`, and `percent_complete` alongside original planned dates and logic relationships.
-* **Roundtrip Testing:** Roundtrip-tested in `tests/test_xer_export_roundtrip.py` for the supported core XER tables and relationships (`PROJECT`, `PROJWBS`, `TASK`, `TASKPRED`). Advanced P6 features like complex resource leveling curves or user-defined fields (UDFs) are not covered in V1.
+* **Fidelity:** Preserves updated `status_code`, `act_start_date`, `act_end_date`, and `percent_complete` alongside contractual planned dates and logic links.
+* **Verification:** Validated by automated roundtrip regression tests (`tests/test_xer_export_roundtrip.py`).
+* **Scope Boundary:** Advanced P6 features such as resource leveling curves, expense categories, and user-defined fields (UDFs) are outside V1 scope.
 
 ---
 
-## SECTION 23 — MONITORING & INFRASTRUCTURE
+## 9. FIELD EVIDENCE INGESTION & THE EXECUTIONEVENT PIPELINE
 
-### Docker Compose Architecture (`docker-compose.yml`)
-
-The platform is deployed using Docker Compose with five containers/services:
-
-```
-┌────────────────────────────────────────────────────────┐
-│               DOCKER BRIDGE NETWORK                    │
-├────────────────────┬───────────────────────────────────┤
-│ Container Name     │ Internal Port / Exposed Port      │
-├────────────────────┼───────────────────────────────────┤
-│ primavera-postgres │ 5432:5432 (PostgreSQL 16)         │
-│ primavera-minio    │ 9000:9000 (API) / 9001:9001 (Web) │
-│ primavera-parser   │ 8001:8001 (document-parser API)   │
-│ primavera-backend  │ 8000:8080 (Backend API & Docs)    │
-│ primavera-frontend │ 3000:3000 (Next.js Dashboard)     │
-└────────────────────┴───────────────────────────────────┘
-```
-
----
-
-## SECTION 24 — TESTING AND VERIFICATION
-
-The codebase contains a comprehensive automated test suite executed via Pytest.
-
-### Test Results Summary:
-* **Total Backend Tests:** **42 Tests**
-* **Passing Tests:** **42 Passed (100% Pass Rate)**
-* **Execution Time:** ~3.51 seconds
-
-### Test Suites Breakdown:
-1. **`test_credential_resolver.py` (9 Tests):** Verifies dedicated keys, one key missing, legacy fallback, production fallback blocking, independent models, explicit overrides, zero real Gemini calls, and secret suppression in logs.
-2. **`test_time_agent.py` (13 Tests):** Verifies conversational clarification turns, proposal staging, row-level locking, stale proposal conflict detection, incremental/cumulative quantity math, temporal resolution against data date, and cross-project validation.
-3. **`test_extraction_matching_integration.py` (10 Tests):** Verifies artifact hashing, MinIO storage, 5-signal matching, auto-link thresholds, review cockpit routing, and progress ledger updates.
-4. **`test_xer_export_roundtrip.py` (2 Tests):** Verifies core multi-table XER generation and relationship link preservation.
-5. **`test_import_e2e.py` (2 Tests):** Verifies end-to-end schedule ingestion and database population.
-6. **`test_activities_api.py` (3 Tests):** Verifies activity CRUD, filtering, pagination, and sorting.
-7. **`test_relationships_api.py` (2 Tests):** Verifies logic link creation and predecessor loops.
-8. **`test_validation.py` (1 Test):** Verifies activity date logic and percent complete bounds validation.
-
----
-
-## SECTION 25 — BOROUGE 4 DEMO
-
-The **Borouge 4 Petrochemical Expansion Project** is the benchmark end-to-end demonstration (`scratch/run_borouge_demo.py`):
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│               BOROUGE 4 DEMO EXECUTION WALKTHROUGH                     │
-├────────────────────────────────────────────────────────────────────────┤
-│ 1. Project Baseline Initialized:                                       │
-│    Project Code: BOROUGE4_DEMO (Data Date: 2024-06-01)                 │
-│    Activity 1  : CIV-1001 - Foundation Pour F-204 (Planned: 140 m3)    │
-│    Activity 2  : CIV-1002 - Foundation Pour F-205 (Planned: 120 m3)    │
-│    Initial State: Both activities 0.0% Complete, NOT_STARTED           │
-├────────────────────────────────────────────────────────────────────────┤
-│ 2. Turn 1 (Ambiguous Supervisor Utterance):                            │
-│    Supervisor: "We poured 35 cubic meters of concrete today."          │
-│    Agent Action: Identifies ambiguity between F-204 & F-205.           │
-│    Agent Reply: "Which foundation was poured today: F-204 or F-205?"   │
-├────────────────────────────────────────────────────────────────────────┤
-│ 3. Turn 2 (Clarification & Disambiguation):                            │
-│    Supervisor: "F-204."                                                │
-│    Agent Action: Re-evaluates same ExecutionEvent with location="F-204"│
-│    Scoring Result: S_total = 0.95, Delta = 0.45 -> AUTO_LINK Target   │
-│    Proposal Staged: Activity CIV-1001, +35 m3, Progress: 0% -> 25%     │
-├────────────────────────────────────────────────────────────────────────┤
-│ 4. CPM Firewall Verification:                                          │
-│    Before confirmation, database is checked. Progress is STILL 0.0%.  │
-│    No unconfirmed update touches the master schedule.                  │
-├────────────────────────────────────────────────────────────────────────┤
-│ 5. Turn 3 (Supervisor Explicit Confirmation):                          │
-│    Supervisor Clicks: [Confirm & Apply]                                │
-│    Execution: Row-locked transaction applies progress to Activity.     │
-│    New State: CIV-1001 percent_complete = 25.0%, status = IN_PROGRESS  │
-│    Ledger Entry Created: 35.0 m3 installed, cumulative = 25.0%        │
-│    Schedule Audit Log Written: previous_state -> new_state JSON        │
-│    Domain Outbox Emitted: SCHEDULE_PROGRESS_UPDATED event              │
-│    Proposal Status Transitioned: PENDING -> CONSUMED                   │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## SECTION 26 — WHAT IS ACTUALLY IMPLEMENTED
-
-| Feature / Subsystem | Implemented? | Source Code Evidence | Technical Notes |
-| :--- | :---: | :--- | :--- |
-| **P6 Schedule Import (.xer, .xml, .csv, .xlsx)** | **YES** | `document-parser/app/parsers/` | Normalizes supported formats into canonical JSON. |
-| **Relational Schedule Persistence** | **YES** | `backend/app/domain/models.py` | Full relational model in PostgreSQL. |
-| **MinIO Artifact Storage & SHA-256** | **YES** | `backend/app/services/minio_service.py` | Provenance retention with SHA-256 and presigned URLs. |
-| **LLM & Rule-based Document Extraction** | **YES** | `backend/app/services/extraction_service.py` | Extracts execution events from PDF, Excel, text. |
-| **5-Signal Candidate Matching** | **YES** | `backend/app/services/matching_service.py` | Exact code, text, WBS, temporal, context signals. |
-| **Safe Non-Finalizing Evaluation** | **YES** | `matching_service.py:evaluate_event_for_agent` | Evaluates candidates without premature DB commits. |
-| **Conversational Time Agent** | **YES** | `backend/app/services/agent_service.py` | Dialog manager, active event tracking, proposals. |
-| **Gemini Intent & Entity Parsing** | **YES** | `backend/app/services/agent_parser.py` | Intent classification & structured JSON extraction. |
-| **Hardened Credential Isolation** | **YES** | `backend/app/services/credential_resolver.py` | Independent API keys and production safety guards. |
-| **Multi-Turn Clarification Loop** | **YES** | `agent_service.py:process_message` | Enriches existing events across up to 3 turns. |
-| **UpdateProposal Lifecycle & Locking** | **YES** | `backend/app/domain/models.py:UpdateProposal` | 5m TTL (300s), baseline snapshots, row-level locking. |
-| **CPM Baseline Protection Layer** | **YES** | `backend/app/services/schedule_update_service.py` | Planned dates shielded; updates actuals only. |
-| **Append-Only Progress Ledger** | **YES** | `backend/app/domain/models.py:ActualProgressLedger` | Composite uniqueness `(activity_id, event_id)`. |
-| **Schedule Audit Trail & Domain Outbox** | **YES** | `backend/app/domain/models.py:ScheduleAuditLog` | State diffs and transactional outbox events. |
-| **P6 Native XER Export** | **YES** | `backend/app/api/export.py` | Streams valid multi-table P6 XER export for core tables. |
-| **Interactive Next.js Frontend** | **YES** | `frontend/app/projects/[id]/page.tsx` | Cockpit with Gantt, WBS, and Time Agent chat. |
-| **Audio File Storage** | **YES** | `minio_service.py` / `extraction_service.py` | Securely stores `.m4a`/`.wav` bytes in MinIO. |
-| **Automated Speech-to-Text (STT)** | **NO** | `extraction_service.py:parse_voice_memo` | **DEFERRED TO V1.1.** Records placeholder note. |
-| **Production OAuth2 / JWT Auth** | **NO** | `backend/app/api/` | Uses demo identity headers (`X-User-ID`). |
-
----
-
-## SECTION 27 — V1 LIMITATIONS / OUT OF SCOPE
-
-1. **Automated Speech-to-Text (STT) Deferred:** Voice memos are securely stored in MinIO with SHA-256 hashes, but automated transcription via Whisper/Gemini Audio is scheduled for V1.1.
-2. **Demo Identity Model:** V1 uses trusted caller identity headers (`X-User-ID`) rather than enterprise Single Sign-On (SSO) / OAuth2.
-3. **No Autonomous Rescheduling:** The Time Agent updates progress actuals (`percent_complete`, `actual_start`), but does not autonomously recalculate CPM forward/backward passes.
-4. **P6 Feature Scope:** Focuses on core schedule entities (activities, WBS, relationships, actuals). Advanced P6 features like complex resource leveling curves or user-defined fields (UDFs) are not parsed in V1.
-
----
-
-## SECTION 28 — FUTURE EXTENSIONS
-
-1. **V1.1 Speech-to-Text Integration:** Direct Whisper/Gemini Audio transcription of site voice memos into structured events.
-2. **Enterprise SSO & OAuth2:** Role-based access control (RBAC) mapping field supervisors, project managers, and lead planners.
-3. **Bi-Directional P6 Enterprise Web Services Synchronization:** Live REST synchronization with Oracle Primavera Cloud / P6 EPPM.
-4. **Computer Vision Progress Verification:** Processing site progress photos attached to chat to cross-verify physical work (e.g. rebar density).
-
----
-
-## SECTION 29 — KEY ENGINEERING INNOVATIONS / DIFFERENTIATORS
-
-1. **The Governed LLM Boundary:** The language model is strictly restricted to extraction and conversation. All candidate retrieval, scoring, progress math, and database mutations are executed by deterministic code.
-2. **Same ExecutionEvent Clarification Continuity:** Clarification dialogs enrich the *same* underlying `ExecutionEvent` record across turns rather than creating fragmented ghost rows.
-3. **Non-Finalizing Matching Evaluation (`evaluate_event_for_agent`):** Allows candidates to be scored during conversational clarification without prematurely locking the event or mutating the database.
-4. **Deterministic Temporal Anchoring:** Dates resolve against the project's contractual `data_date`, allowing historical schedules to be updated without calendar-drift errors.
-5. **The CPM Baseline Protection Layer:** Planned dates, baseline durations, and logic dependencies are shielded from field updates.
-6. **Proposal Snapshot & Row-Locking Concurrency:** Reduces race conditions and prevents stale proposals from being applied over conflicting schedule edits.
-7. **Append-Only Idempotent Progress Ledger:** Composite uniqueness `(activity_id, execution_event_id)` ensures duplicate reports cannot double-credit progress.
-
----
-
-## SECTION 30 — COMPLETE END-TO-END SEQUENCE
+Field progress arrives through three distinct modalities, all converging into canonical `ExecutionEvent` records:
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Supervisor
-    participant UI as TimeAgentChat (Frontend)
-    participant API as AgentRouter (FastAPI)
-    participant Agent as TimeAgentService
-    participant Parser as ConversationalParser (Gemini)
-    participant Matcher as MatchingService
-    participant Updater as ScheduleUpdateService
-    participant DB as PostgreSQL 16
-    participant MinIO as MinIO Object Store
-
-    Note over Supervisor,UI: Conversational Reporting & Disambiguation
-    Supervisor->>UI: Types: "Poured 35 m3 concrete today"
-    UI->>API: POST /api/v1/projects/{id}/agent/conversations/{conv_id}/messages
-    API->>Agent: process_message()
-    Agent->>Parser: parse_with_gemini(text)
-    Parser-->>Agent: ParsedIntent(PROGRESS_REPORT, qty=35, unit=m3, loc=None)
-    Agent->>DB: INSERT ExecutionEvent (status=DRAFT, active_event_id)
-    Agent->>Matcher: evaluate_event_for_agent()
-    Matcher-->>Agent: Candidates: CIV-1001 & CIV-1002 (Delta < 0.15 -> AMBIGUOUS)
-    Agent-->>UI: ActionCard(CLARIFICATION_REQUIRED, options=[F-204, F-205])
-    UI-->>Supervisor: Displays question & option buttons
-
-    Supervisor->>UI: Clicks option "F-204"
-    UI->>API: POST /api/v1/projects/{id}/agent/conversations/{conv_id}/messages (text="F-204")
-    API->>Agent: process_message(text="F-204", active_event_id)
-    Agent->>DB: UPDATE ExecutionEvent (location="F-204")
-    Agent->>Matcher: evaluate_event_for_agent()
-    Matcher-->>Agent: Top: CIV-1001 (Score: 0.95, Delta: 0.45 -> AUTO_LINK)
-    Agent->>DB: INSERT UpdateProposal (CIV-1001, delta=+35m3, 25%, TTL: 5m)
-    Agent-->>UI: ActionCard(PROPOSAL_STAGED, [Confirm & Apply])
-    UI-->>Supervisor: Displays proposal card with delta & button
-
-    Note over Supervisor,DB: Governed Confirmation & CPM Firewall Update
-    Supervisor->>UI: Clicks [Confirm & Apply]
-    UI->>API: POST /api/v1/projects/{id}/agent/conversations/{conv_id}/confirm
-    API->>Agent: confirm_proposal()
-    Agent->>DB: SELECT proposal FOR UPDATE (Row Lock)
-    Agent->>Agent: Verify TTL (5m) & Compare baseline snapshot
-    Agent->>Updater: apply_event_progress(activity_id, commit=False)
-    Updater->>DB: Check Idempotency in ActualProgressLedger
-    Updater->>DB: INSERT ActualProgressLedger (installed=35m3, cum=25%)
-    Updater->>DB: UPDATE Activity (percent_complete=25%, actual_start=date)
-    Updater->>DB: INSERT ScheduleAuditLog (state_diff_json)
-    Updater->>DB: INSERT DomainOutbox (SCHEDULE_PROGRESS_UPDATED)
-    Agent->>DB: UPDATE UpdateProposal (status=CONSUMED)
-    Agent->>DB: COMMIT Transaction
-    Agent-->>UI: HTTP 200 (Success, new_percent=25.0%)
-    UI-->>Supervisor: Shows confirmation badge; refreshes Gantt timeline
+flowchart LR
+    A[PDF / Spreadsheet Upload] -->|ExtractionService| D[ExecutionEvent]
+    B[Voice Memo Audio File] -->|MinIO Storage + Metadata| D
+    C[Time Agent Chat] -->|ConversationalParser| D
+    D --> E[MatchingService: 5-Signal Scoring]
 ```
 
+### Source Type Modalities
+1. **`ARTIFACT`:** Uploaded files (PDF inspection dockets, Excel logs, audio memos). Stored in MinIO with SHA-256 hash, size, and MIME type.
+2. **`CONVERSATION`:** Direct chat utterances from field supervisors. Linked to `conversation_id` and `message_id`.
+3. **`HYBRID`:** File attachments uploaded inside a chat session or chat clarification that enriches an artifact event. Tracks both artifact storage keys and conversation session context.
+
 ---
 
-## SECTION 31 — PPT CONTENT MAP
+## 10. DETERMINISTIC 5-SIGNAL ACTIVITY MATCHING ENGINE
 
-A slide-by-slide structure tailored for presentation slide builders:
+The `MatchingService` (`backend/app/services/matching_service.py`) connects execution events to schedule activities using a transparent multi-signal formula:
 
-### Slide 1 — Title & Project Identity
-* **Objective:** Introduce the project and establish executive context as a direct response to SIH Problem Statement PS26122.
-* **Main Points:** 
-  - **SIH 2026 Problem Statement:** PS26122 (Planning-to-Execution Progress Reconciliation).
-  - **Implemented Solution:** `ScheduleManager` (AI-Assisted Schedule Ingestion, Governed Field-Progress Matching & Time Agent).
-  - **Key Clarification:** **PS26122 is the problem.** **ScheduleManager is our implemented solution platform.** **Time Agent is a major conversational interface/component within that platform, not the entire solution.**
-* **Recommended Visual:** Split screen showing an industrial refinery site and an Oracle Primavera P6 Gantt chart.
-* **Key Facts:** Built specifically for SIH 2026 Problem Statement PS26122; provides closed-loop progress updating with auditable governance.
+### 1. Candidate Retrieval & Pre-Filtering
+* Scope: Activities within the target project where `status != 'COMPLETED'`.
+* Temporal Window: `planned_start <= execution_date + 30 days` and `planned_finish >= execution_date - 30 days`.
+* Safe Fallback: If temporal filtering yields zero matches, the engine falls back to all non-completed activities in the project.
 
-### Slide 2 — The Industry Problem (The Latency & Traceability Gap)
-* **Objective:** Explain why manual schedule updating fails.
-* **Main Points:** Delays of days or weeks before site reports reach the master schedule; vocabulary disconnect between foremen and P6 activity codes; manual transcription errors; loss of forensic evidence for delay analysis.
-* **Recommended Visual:** Diagram of the broken manual workflow showing delayed emails, manual typing, and stale reports.
-* **Key Facts:** The problem statement describes delays of days or weeks between work completion and schedule reconciliation.
+### 2. 5-Signal Scoring Formula
 
-### Slide 3 — Our Solution Overview (Governed Closed-Loop Integration)
-* **Objective:** Present the end-to-end concept.
-* **Main Points:** MinIO artifact storage with SHA-256 hashing; conversational Time Agent; 5-signal matching engine; CPM baseline protection layer; append-only progress ledger.
-* **Recommended Visual:** High-level solution diagram (Artifact + Chat $\rightarrow$ Matcher $\rightarrow$ Proposal $\rightarrow$ CPM Firewall $\rightarrow$ P6 Export).
-* **Do NOT Claim:** Do not claim fully autonomous rescheduling without human oversight.
+$$S_{\text{total}} = w_{\text{id}} S_{\text{id}} + w_{\text{text}} S_{\text{text}} + w_{\text{wbs}} S_{\text{wbs}} + w_{\text{temp}} S_{\text{temp}} + w_{\text{context}} S_{\text{context}}$$
 
-### Slide 4 — Complete System Architecture
-* **Objective:** Prove technical credibility to engineering judges.
-* **Main Points:** Next.js 14 frontend; FastAPI backend; PostgreSQL 16; MinIO S3 store; Google Gemini LLM; independent document parser service.
-* **Recommended Visual:** Mermaid architecture diagram from Section 5.
-* **Key Facts:** Docker Compose deployment with five containers/services (`frontend`, `backend`, `document-parser`, `postgres`, `minio`).
+| Signal | Evaluation Logic in Code | Weight (Code Present) | Weight (No Code Present) |
+| :--- | :--- | :---: | :---: |
+| **$S_{\text{id}}$ (Exact Code)** | $1.0$ if reported activity code matches `activity_code` or appears verbatim in excerpt; else $0.0$. | **0.40** (guarantees $S \ge 0.95$) | **0.00** |
+| **$S_{\text{text}}$ (Text Similarity)** | Token Jaccard overlap + substring matching across activity name and description. | **0.30** | **0.45** |
+| **$S_{\text{wbs}}$ (WBS & Hierarchy)** | $1.0$ for exact WBS name match; $0.95$ for location match; $0.85$ for discipline match. | **0.15** | **0.25** |
+| **$S_{\text{temp}}$ (Temporal Window)**| $1.0$ if execution date falls within planned dates; Gaussian decay outside window. | **0.10** | **0.15** |
+| **$S_{\text{context}}$ (Site Context)**| Matches physical location and contractor name ($+0.2$ bonus). | **0.05** | **0.15** |
 
-### Slide 5 — The Time Agent (Conversational Site Engineer)
-* **Objective:** Highlight the conversational AI capability.
-* **Main Points:** Supervisors report work in plain English; handles direct quantity reports and clarifications; supported intents.
-* **Recommended Visual:** Screenshot of `TimeAgentChat.tsx` displaying supervisor message and clarification buttons.
-* **Key Facts:** Powered by `gemini-2.5-flash`; isolates credentials via `CredentialResolver`.
+### 3. Confidence Routing Gates
+Candidates are sorted descending by $S_{\text{total}}$. Margin delta $\Delta = S_{\text{top}} - S_{\text{second}}$:
+* **`AUTO_LINK` (Clear Match):** $S_{\text{total}} \ge 0.85 \quad \wedge \quad \Delta \ge 0.15 \quad \wedge \quad C_{\text{ext}} \ge 0.80$.
+* **`IN_REVIEW` (Ambiguous / Competing):** $S_{\text{total}} \ge 0.50$ but fails auto-link criteria (e.g. $\Delta < 0.15$).
+* **`UNMATCHED`:** $S_{\text{total}} < 0.50$.
 
-### Slide 6 — Why the AI Cannot Directly Change the Schedule
-* **Objective:** Address AI safety, governance, and enterprise trust.
-* **Main Points:** The LLM cannot directly mutate the authoritative schedule. The LLM is strictly used for language understanding and entity extraction. Deterministic code governs candidate scoring, math calculations, and schedule commits.
-* **Recommended Visual:** Architecture flow showing separation of language understanding from deterministic mutation:
+---
 
+## 11. TIME AGENT: CONVERSATIONAL SITE ENGINEER
+
+The Time Agent is an interactive assistant embedded in the project cockpit. It translates unstructured field dialogue into governed schedule actions.
+
+### 6 Supported Intent Classes (`backend/app/schemas/agent.py`)
+1. **`INFORMATION_QUERY`:** Supervisor asks for schedule dates, activity progress, upcoming tasks, or historical benchmarks.
+2. **`PROGRESS_REPORT`:** Supervisor reports physical site accomplishments (e.g., *"Poured 35 m3 concrete for F-204 today"*).
+3. **`PROGRESS_UPDATE_REQUEST`:** Supervisor requests a direct percentage or status update on a specific task.
+4. **`CLARIFICATION_RESPONSE`:** Supervisor provides missing details (activity code, location, foundation number) in response to an agent query.
+5. **`ARTIFACT_SUBMISSION`:** Supervisor uploads or references a site docket, pour ticket, or inspection report.
+6. **`BULK_PROGRESS_REPORT`:** Supervisor reports progress across a broader scope (e.g., *"We completed all electrical activities in Substation B"*).
+
+---
+
+## 12. DYNAMIC MULTI-CHOICE CLARIFICATION
+
+When a supervisor's report is ambiguous, the Time Agent does not guess. It initiates a dynamic clarification loop based on the number of viable candidates:
+
+```text
+Ambiguous Supervisor Report (e.g. "We poured 35 m3 concrete today")
+                         │
+                         ▼
+        Candidate Retrieval & 5-Signal Scoring
+                         │
+         ┌───────────────┴───────────────┐
+         ▼                               ▼
+Two Competing Candidates          Three to Four Candidates
+         │                               │
+         ▼                               ▼
+Pairwise A/B Clarification        Structured Multi-Choice List
+"Did this apply to F-204          Selectable Candidate Buttons +
+ or F-205?"                       "None of these" Option
 ```
-                 GEMINI
-                    │
-        Language understanding
-                    │
-                    ▼
-            ExecutionEvent
-                    │
-                    ▼
-        Deterministic Matcher
-                    │
-                    ▼
-            Update Proposal
-                    │
-             Human Confirm
-                    │
-                    ▼
-      ScheduleUpdateService
-                    │
-                    ▼
-          Authoritative DB
+
+### Dynamic Clarification Invariants
+1. **Pairwise A/B Prompt:** For 2 close candidates ($\Delta < 0.15$), the agent asks a direct comparative question with two action buttons.
+2. **Ranked Candidate List:** For 3–4 candidates, the agent presents a structured multi-choice list with activity codes, names, locations, and scores, alongside a **"None of these"** escape option.
+3. **Same Event Enrichment:** Subsequent turns update the *existing* `ExecutionEvent` record (tracked via `Conversation.active_event_id`) rather than spawning orphan rows.
+4. **Strict 3-Turn Bound:** Clarification is capped at **3 turns**. If ambiguity persists after 3 turns, the agent automatically routes the event to the Lead Planner Review Queue (`IN_REVIEW`).
+
+---
+
+## 13. GOVERNED BULK PROGRESS INTENT
+
+Supervisors often report work at a summary or trade level (*"We completed all the electrical activities"*). `ScheduleManager` handles this through a governed, multi-step bulk workflow:
+
+```mermaid
+flowchart TD
+    A[Supervisor: 'We completed all electrical activities'] --> B[ConversationalParser: BULK_PROGRESS_REPORT]
+    B --> C[Authoritative PostgreSQL Scope Lookup]
+    C --> D[Resolved Activity Set: e.g. ELEC-01, ELEC-02, ELEC-03]
+    D --> E[Bulk Scope Proposal Card with Preview]
+    E --> F{Explicit Human Confirmation}
+    F -- Confirmed --> G[ScheduleUpdateService: Atomic Transaction]
+    G --> H[Progress Ledger + Audit Log + Domain Outbox per Activity]
+    F -- Cancelled --> I[Proposal Expired / Cancelled - No DB Mutation]
 ```
 
-* **Key Facts:** Staged proposals isolate AI recommendations from master schedule tables until verified by human confirmation.
-
-### Slide 7 — The 5-Signal Matching Engine
-* **Objective:** Explain how field events find the correct P6 activity.
-* **Main Points:** Multi-signal formula combining Exact Code ($S_{\text{id}}$), Text Similarity ($S_{\text{text}}$), WBS Hierarchy ($S_{\text{wbs}}$), Temporal Schedule Window ($S_{\text{temp}}$), and Context ($S_{\text{context}}$).
-* **Recommended Visual:** Scoring formula box with signal weight breakdown and margin delta ($\Delta$) routing rule.
-* **Key Facts:** Exact codes score $\ge 0.95$; auto-link requires $S_{\text{total}} \ge 0.85$ and $\Delta \ge 0.15$.
-
-### Slide 8 — Clarification & Human-in-the-Loop Governance
-* **Objective:** Demonstrate how the system handles ambiguity.
-* **Main Points:** When candidates are close ($\Delta < 0.15$), the agent asks targeted clarifying questions; enriches the same event; stages proposals with 5-minute TTL.
-* **Recommended Visual:** Sequence diagram showing Turn 1 (Ambiguity) $\rightarrow$ Turn 2 (Clarification) $\rightarrow$ Proposal Card.
-* **Key Facts:** Maximum 3 clarification turns before automatic escalation to planner review.
-
-### Slide 9 — The CPM Baseline Firewall & Ledger
-* **Objective:** Demonstrate schedule integrity and auditability.
-* **Main Points:** Planned dates and logic dependencies are shielded from field edits; updates affect actuals only; append-only `ActualProgressLedger`; complete state diffs in `ScheduleAuditLog`.
-* **Recommended Visual:** Diagram of the CPM Firewall (Mutable vs. Immutable fields) and sample ledger entry.
-* **Key Facts:** Idempotent update handling enforced via composite unique constraint `(activity_id, execution_event_id)`.
-
-### Slide 10 — Benchmark Demonstration (Borouge 4 Petrochemical Expansion)
-* **Objective:** Walk through the verified live demo.
-* **Main Points:** Foundation concrete pour ($140\text{ m}^3$ planned); ambiguous initial report; supervisor clarifies "F-204"; staged proposal ($25\%$ progress); supervisor confirmation; instant database commit.
-* **Recommended Visual:** Step-by-step screenshots or transcript from `run_borouge_demo.py`.
-* **Key Facts:** Exact mathematical verification: $35\text{ m}^3 / 140\text{ m}^3 = 25.0\%$ progress.
-
-### Slide 11 — Schedule Interoperability & P6 XER Export
-* **Objective:** Prove enterprise compatibility with existing tools.
-* **Main Points:** Ingests P6 `.xer`, `.xml`, `.csv`, `.xlsx`. Exports compliant native P6 `.xer` files reflecting verified site updates across core tables.
-* **Recommended Visual:** Graphic showing roundtrip flow: P6 XER Ingest $\rightarrow$ ScheduleManager Updates $\rightarrow$ P6 XER Export $\rightarrow$ Re-opened in Oracle Primavera P6.
-* **Key Facts:** Validated by automated roundtrip regression tests for core tables (`PROJECT`, `PROJWBS`, `TASK`, `TASKPRED`).
-
-### Slide 12 — Testing, Hardening & Verification
-* **Objective:** Emphasize software reliability and code quality.
-* **Main Points:** 42 automated tests passing ($100\%$ pass rate); credential isolation verified; zero external API calls in test suite; production security guards.
-* **Recommended Visual:** Pytest terminal output screenshot (42 passed in 3.51s).
-* **Key Facts:** Complete test coverage across credential resolution, concurrency row-locking, and quantity semantics.
-
-### Slide 13 — Future Roadmap & Conclusion
-* **Objective:** Summarize business value and outline next steps.
-* **Main Points:** Near-term: Speech-to-Text voice transcription (V1.1) and Enterprise SSO/OAuth2. Long-term: Vision-based progress validation.
-* **Recommended Visual:** Impact metric summary cards (e.g. manual cycle of days/weeks reduced toward near-real-time updates; source forensic traceability).
-* **Closing Line:** *ScheduleManager delivers governed, AI-assisted site progress ingestion while safeguarding contractual master schedules.*
+### Bulk Intent Safety Invariants
+* **Authoritative Membership:** The LLM extracts the scope keywords (e.g., discipline = electrical); **PostgreSQL executes the authoritative query** resolving which activities belong to that scope. The LLM never invents or finalizes activity membership.
+* **Preview Before Confirmation:** The UI renders a Bulk Proposal Card listing all target activities, planned quantities, and proposed status (`COMPLETED`, 100%).
+* **Atomic Mutation:** Updates are executed in a single transaction across `ScheduleUpdateService`.
+* **Safe Scope Boundary:** Governed bulk intent safely handles **scope completion** (e.g. marking a resolved group completed). **Arbitrary quantity distribution** (e.g. dividing $35\text{ m}^3$ blindly across 5 tasks) is **strictly unsupported** to prevent unverified progress allocation.
 
 ---
 
-## SECTION 32 — VISUAL ASSET CHECKLIST
+## 14. CONVERSATION HISTORY VS. INSTITUTIONAL MEMORY
 
-| Visual Asset | Screen / Component to Capture | What It Demonstrates | Slide Placement |
-| :--- | :--- | :--- | :--- |
-| **Gantt Chart Cockpit** | `frontend/app/projects/[id]/page.tsx` (Gantt Tab) | P6-style CPM timeline with activity bars and logic links. | Slide 1, Slide 3, Slide 10 |
-| **Time Agent Chat Drawer** | `TimeAgentChat.tsx` | Supervisor conversation, message history, and file dropzone. | Slide 5 |
-| **Clarification Action Card** | `TimeAgentChat.tsx` | Clarification question with interactive candidate option buttons. | Slide 8, Slide 10 |
-| **Staged Proposal Card** | `TimeAgentChat.tsx` | Staged update card showing current %, proposed %, delta, and [Confirm & Apply] button. | Slide 8, Slide 10 |
-| **Updated Gantt Progress** | Gantt Timeline post-confirmation | CIV-1001 updating from 0% to 25% complete with green progress fill. | Slide 10, Slide 13 |
-| **Architecture Diagram** | Mermaid System Architecture | Containerized architecture design, ports, and data flows. | Slide 4 |
-| **5-Signal Scoring Box** | Formula diagram (Section 9) | Transparent mathematical scoring weights and confidence thresholds. | Slide 7 |
-| **CPM Firewall Matrix** | Table graphic (Section 14) | Separation of mutable actuals from immutable contractual baselines. | Slide 9 |
-| **Pytest Terminal Output** | Command line test execution | 42 passed tests verifying reliability, safety, and performance. | Slide 12 |
+A vital technical distinction for presentation clarity:
 
----
-
-## SECTION 33 — PRESENTATION-SAFE TERMINOLOGY
-
-* **ExecutionEvent:** A normalized, discrete record representing physical work performed on site on a specific date, derived from a document or conversation.
-* **Time Agent:** The conversational AI assistant that interacts with supervisors to collect, clarify, and stage progress updates.
-* **UpdateProposal:** A temporary, staged schedule update containing baseline snapshots and delta calculations awaiting human confirmation (5-minute TTL).
-* **CPM Baseline Protection Layer / Firewall:** The strict architectural rule preventing field updates from altering planned dates, baseline durations, or network logic.
-* **5-Signal Matching:** The mathematical engine evaluating activity codes, text similarity, WBS hierarchy, temporal windows, and physical context.
-* **Margin Delta ($\Delta$):** The score difference between the top-ranked candidate activity and the runner-up, measuring match certainty.
-* **Clarification Turn:** A dialog exchange where the agent asks the supervisor to resolve ambiguous details before proceeding.
-* **Data Date:** The contractual cutoff date of the schedule against which relative temporal references ("today", "yesterday") are deterministically resolved.
-* **ActualProgressLedger:** The append-only database ledger recording every progress delta credited to an activity by application design.
-* **Domain Outbox:** A transactional messaging table used to reliably publish schedule events to external systems.
-* **Source Type:** The provenance category of an execution event (`ARTIFACT`, `CONVERSATION`, or `HYBRID`).
-
----
-
-## SECTION 34 — FACT VS CLAIM CONTROL
-
-To ensure credibility during presentations and technical Q&A, strictly follow these phrasing guidelines:
-
-| Presentation Topic | Safe Phrasing (RECOMMENDED) | Unsafe Phrasing (AVOID) |
+| Dimension | Conversation History | Institutional Memory |
 | :--- | :--- | :--- |
-| **AI Role** | *"Gemini is used for conversational understanding, intent classification, and document entity extraction."* | *"AI automatically manages and runs the entire schedule."* |
-| **Decision Authority** | *"Deterministic backend services calculate progress and enforce confidence thresholds."* | *"The AI decides which activity to update."* |
-| **Schedule Integrity** | *"The CPM Firewall ensures planned dates and logic links are shielded from field updates."* | *"The agent autonomously reschedules the critical path."* |
-| **Mutation Boundary** | *"The LLM cannot directly mutate the authoritative schedule; updates require deterministic matching and human confirmation."* | *"Zero risk of AI hallucinations corrupting the schedule."* |
-| **Baseline Protection** | *"Schedule updates are constrained by a CPM baseline protection layer."* | *"Guaranteed baseline protection under all circumstances."* |
-| **Traceability** | *"Applied updates retain source/provenance information linking to document bytes or transcripts."* | *"100% forensic traceability."* |
-| **Reporting Latency** | *"The prototype reduces the manual reporting cycle from days or weeks toward near-real-time processing."* | *"Zero Reporting Latency / 7-day latency eliminated to seconds."* |
-| **System Classification**| *"An implemented prototype platform / containerized prototype for governed schedule integration."* | *"A production-grade Primavera P6 enterprise system."* |
-| **Container Architecture**| *"Docker Compose deployment with five containers/services: frontend, backend, parser, database, and storage."* | *"5 containerized microservices built from scratch."* |
-| **Artifact Retention** | *"Raw artifacts are retained in MinIO with SHA-256 content hashes for provenance and integrity verification."* | *"Permanent, unalterable, completely immutable audit storage."* |
-| **Progress Ledger** | *"The progress ledger is append-only by application design."* | *"An intrinsically tamper-proof cryptographic blockchain."* |
-| **XER Fidelity** | *"Roundtrip-tested for the supported core XER tables and relationships (PROJECT, PROJWBS, TASK, TASKPRED)."* | *"100% structural fidelity across all Primavera P6 features."* |
-| **Media Capability** | *"Supports text conversations, PDF/spreadsheet artifacts, and audio file retention (STT deferred to V1.1)."* | *"Full real-time multimodal image, photo, and voice recognition."* |
-| **Authentication** | *"V1 implements project-scoped authorization with trusted caller identity headers for prototype evaluation."* | *"Enterprise-grade OAuth2/JWT authentication is deployed."* |
-| **Matching Accuracy** | *"Multi-signal matching routes high-confidence matches and presents ambiguous cases for human review."* | *"Our AI matching is 100% accurate under all conditions."* |
-| **Test Verification** | *"The backend is hardened with 42 automated tests covering concurrency, security, and math."* | *"The software is completely bug-free and certified."* |
+| **Core Question** | *"What did we discuss in this chat session?"* | *"What have we learned from historical project execution?"* |
+| **Scope** | Project/schedule-scoped (`project_id`). | Historical project execution actuals across verified records. |
+| **Authoritative Store** | `conversations` and `conversation_messages` tables. | `actual_progress_ledger`, `execution_events`, `activities`. |
+| **Nature of Data** | Ephemeral chat turns, proposals, clarification states. | Append-only verified progress, installed quantities, actual dates. |
+| **Isolation** | Separate chats never share active events or proposals. | Aggregated deterministically across completed project actuals. |
+| **LLM Role** | Chat dialogue and prompt history. | LLM explains structured DTO results; **does not compute metrics**. |
+
+> **IMPORTANT NON-CLAIM:** There is **NO global cross-project chat memory**. Conversations are strictly isolated to their parent project. Institutional Memory is **not** a chat replay; it is structured relational execution intelligence.
 
 ---
 
-## SECTION 35 — FINAL EXECUTIVE SUMMARY
+## 15. SCHEDULE UPDATE GOVERNANCE & THE CPM BASELINE FIREWALL
 
-### 30-Second Elevator Pitch
-`ScheduleManager` reduces the multi-week reporting lag in capital construction by providing a conversational AI **Time Agent** and document ingestion pipeline that translates unstructured field updates into verified Primavera P6 schedule updates. By pairing a mathematical 5-signal matching engine with an append-only progress ledger and CPM baseline protection layer, the platform ensures that master schedules are updated accurately, transparently, and safely without risking contractual baseline integrity.
+### The CPM Baseline Protection Layer
+Contractual CPM schedules require strict separation between mutable progress actuals and immutable contractual baseline logic:
 
-### 1-Minute Pitch
-In capital construction, critical project decisions often rely on Primavera P6 schedules that are days or weeks out of date because translating daily field logs into CPM activities requires tedious manual interpretation. `ScheduleManager` bridges this gap. Field supervisors report progress via simple mobile chat or document uploads. An intelligent Time Agent extracts physical work events, disambiguates competing activities through natural dialogue, and stages transparent update proposals. Once confirmed by an authorized user, updates are committed to an append-only progress ledger while strictly shielding contractual baseline dates behind a CPM protection layer. Master schedules stay fresh, accurate, and completely auditable.
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                   THE CPM BASELINE FIREWALL                            │
+├──────────────────────────────────┬─────────────────────────────────────┤
+│ MUTABLE (Actual Progress Fields) │ IMMUTABLE (Contractual Baselines)   │
+├──────────────────────────────────┼─────────────────────────────────────┤
+│  percent_complete                │  planned_start                      │
+│  actual_start                    │  planned_finish                     │
+│  actual_finish                   │  original_duration                  │
+│  status (IN_PROGRESS/COMPLETED)  │  calendar assignments               │
+│                                  │  predecessor/successor dependencies │
+│                                  │  relationship lag                   │
+└──────────────────────────────────┴─────────────────────────────────────┘
+```
 
-### Technical Engineering Summary
-`ScheduleManager` is a containerized prototype platform deployed via Docker Compose with five services: Next.js 14 frontend, FastAPI backend, independent document parser, PostgreSQL 16 database, and MinIO object storage. It couples Google Gemini for conversational language understanding with deterministic backend services for entity resolution and schedule mutation. The system features a 5-signal candidate matching engine ($S_{\text{total}} \ge 0.85, \Delta \ge 0.15$), row-level concurrency locking for update proposals (5-minute TTL), append-only progress ledgers, transactional domain outboxes, hardened credential isolation, and native roundtrip Primavera P6 XER export for core tables—backed by a verified 42-test automated regression suite.
+### UpdateProposal Lifecycle & Concurrency Controls
+* **5-Minute TTL:** Proposals expire automatically after 300 seconds (`expires_at`).
+* **Baseline State Snapshot:** Proposals capture a snapshot of the activity's state when staged (`baseline_activity_state`).
+* **Conflict Detection:** At confirmation, the current activity state is compared against the snapshot. If another user modified the activity in the interim, the update is rejected with `HTTP 409 Conflict`.
+* **Row-Level Concurrency Locking (`SELECT FOR UPDATE`):** When `/confirm` is called, the proposal row is locked at the database level, preventing double-execution.
+* **Monotonicity & Bounds:** Cumulative percent is clamped to $[0.0, 100.0\%]$. Negative quantity deltas are rejected (`ValidationException`). Progress cannot go backwards.
 
-### Core Value Proposition
-* **Near-Real-Time Progress Ingestion:** The prototype reduces the manual reporting cycle from days or weeks toward near-real-time processing.
-* **Forensic Provenance:** Applied updates retain source/provenance information linking directly to source document bytes or chat transcripts.
-* **CPM Baseline Protection:** Schedule updates are constrained by a CPM baseline protection layer; contractual planned dates and logic links are shielded from field edits.
-* **Human-in-the-Loop Governance:** AI proposes; authorized humans confirm.
+---
+
+## 16. APPEND-ONLY PROGRESS LEDGER & AUDIT PROVENANCE
+
+Every verified update applied by `ScheduleUpdateService` produces an unbreakable audit trail across three relational tables:
+
+```text
+                 ScheduleUpdateService.apply_event_progress()
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        ▼                             ▼                             ▼
+ActualProgressLedger          ScheduleAuditLog                DomainOutbox
+- activity_id                 - previous_state (JSON)         - SCHEDULE_PROGRESS_UPDATED
+- execution_event_id          - new_state (JSON)              - payload (JSON)
+- installed_quantity          - user_id                       - status: PENDING
+- incremental_percent         - timestamp
+- cumulative_percent
+- composite unique key:
+  (activity_id, event_id)
+```
+
+1. **Idempotency Guarantee:** Composite unique index `(activity_id, execution_event_id)` prevents duplicate reports from double-crediting progress.
+2. **Forensic Provenance:** Every ledger row points directly to the originating `ExecutionEvent`, which links to the source MinIO artifact (SHA-256 hash) or chat transcript.
+3. **State Diff Auditing:** `ScheduleAuditLog` preserves exact before-and-after JSON state diffs for all schedule mutations.
+
+---
+
+## 17. INSTITUTIONAL MEMORY ENGINE V1 (IMPLEMENTED)
+
+> **PRESENTATION BREAKTHROUGH:**  
+> Institutional Memory V1 is **fully implemented in current working code**, not a design concept or roadmap item.
+
+### Definition
+> **"Institutional Memory turns verified historical project execution data into reusable, queryable knowledge about how work actually happened."**
+
+### V1 Engine Architecture
+
+```text
+Verified Execution Records
+(ExecutionEvent + ActualProgressLedger + Activity + ScheduleAuditLog)
+                       │
+                       ▼
+           HistoricalAnalyticsService
+         (Deterministic SQL Analytics)
+                       │
+                       ▼
+    ┌──────────────────┼──────────────────┐
+    ▼                  ▼                  ▼
+Observed          Planned vs.          Advisory
+Productivity       Actual Duration      Planning Benchmarks
+(Qty / Day)        Variance             (N >= 3, P50/P80 N >= 5)
+    │                  │                  │
+    └──────────────────┼──────────────────┘
+                       │
+                       ▼
+           InstitutionalMemoryService
+         (Domain Façade & CSV Export)
+                       │
+         ┌─────────────┴─────────────┐
+         ▼                           ▼
+Frontend Workspace            Time Agent Tool
+(5 Dedicated Subviews)        (query_historical_performance)
+```
+
+---
+
+## 18. OBSERVED PRODUCTIVITY ANALYTICS & FORMULAE
+
+### Authoritative Mathematical Formula
+The observed production rate is calculated deterministically via SQL over verified ledger actuals:
+
+$$\text{Observed Production Rate} = \frac{\sum \text{installed\_quantity}}{\text{COUNT}(\text{DISTINCT } \text{reporting\_date})}$$
+
+### Critical Technical Safeguards
+1. **Strict Unit Isolation:** Incompatible engineering units are never combined. $m^3$ (concrete), $m$ (cable tray), $t$ (steel), and spools (piping) are tracked in strictly segregated unit buckets.
+2. **Presentation-Safe Terminology:** Referred to as **"Observed production rate"** or **"Quantity per reporting day"**. Not claimed as "labor productivity" or "hourly crew productivity" because timesheet crew hours are not in the primary schedule model.
+3. **Multi-Day Reporting Normalization:** Distinct reporting dates are used as the denominator, preventing duplicate daily reports from distorting the rate.
+
+---
+
+## 19. PLANNED VS. ACTUAL DURATION ANALYTICS
+
+### Duration Variance Formula
+For completed schedule activities where required dates exist:
+
+$$\text{Planned Duration} = \text{planned\_finish} - \text{planned\_start}$$
+
+$$\text{Actual Duration} = \text{actual\_finish} - \text{actual\_start}$$
+
+$$\text{Duration Variance} = \text{Actual Duration} - \text{Planned Duration}$$
+
+### Governance & Eligibility Rules
+* **Exclusion of Incomplete Work:** Duration metrics are computed **only for completed activities** (`status = 'COMPLETED'` with non-null `actual_start` and `actual_finish`). Ongoing activities do not distort historical duration averages.
+* **Positive Variance:** Indicates the activity took longer than planned (schedule overrun).
+* **Negative Variance:** Indicates the activity finished faster than planned.
+
+---
+
+## 20. ADVISORY PLANNING BENCHMARKS & SPARSE DATA GOVERNANCE
+
+### Sample Size Governance Rules
+The system enforces strict statistical sample size thresholds to prevent misleading planners:
+
+| Metric | Required Sample Size ($N$) | Behavior When Sample is Insufficient |
+| :--- | :---: | :--- |
+| **Observed Rate** | $N \ge 1$ | Displays observed rate; flags `INSUFFICIENT_SAMPLE` if $N < 3$. |
+| **Planning Benchmark** | $N \ge 3$ | Status: `INSUFFICIENT_SAMPLE`. Benchmark not declared authoritative. |
+| **P50 / P80 Percentiles**| $N \ge 5$ | Percentiles suppressed until $\ge 5$ verified completed activities exist. |
+| **No History Available** | $N = 0$ | Status: `NO_HISTORICAL_BENCHMARK` or `NO_RECORDS`. |
+
+> **CORE GOVERNANCE MESSAGE FOR JUDGES:**  
+> **"The system does not fabricate historical benchmarks when evidence is insufficient."** Transparently displaying `INSUFFICIENT_DATA` is an engineered governance strength, not a limitation.
+
+---
+
+## 21. INTERACTIVE EVIDENCE LINEAGE DRAWER & CSV EXPORT
+
+### Interactive Evidence Drawer (`frontend/components/EvidenceDrawer.tsx`)
+Every historical metric links back to its underlying evidence. Clicking any metric opens a slide-over drawer displaying:
+* **Event ID:** Unique execution event identifier (`UUID`).
+* **Ledger ID:** Primary key in `actual_progress_ledger`.
+* **Activity:** Contractual activity code and name.
+* **Reporting Date:** Verified date of work execution.
+* **Installed Quantity & Unit:** e.g., $35.0\text{ m}^3$.
+* **Verbatim Source Excerpt:** Exact text from the field report or supervisor chat.
+* **Source Document:** Document filename or conversation session ID.
+* **Extraction Confidence & Match Score:** Audit metrics showing automated extraction quality.
+
+### Standard RFC 4180 CSV Export (`GET .../institutional-memory/ledger/export`)
+Planners can export the entire verified historical ledger to standard CSV for external analysis in Excel, PowerBI, or enterprise PMIS platforms.
+
+---
+
+## 22. TIME AGENT GROUNDED HISTORICAL QUERY FLOW
+
+When a user asks historical questions in chat, the Time Agent queries Institutional Memory via a deterministic tool:
+
+```text
+Supervisor/Planner: "What was our historical concrete pouring rate?"
+                         │
+                         ▼
+             Time Agent / ConversationalParser
+     (Classifies INFORMATION_QUERY with historical intent)
+                         │
+                         ▼
+        query_historical_performance() Tool Call
+                         │
+                         ▼
+             InstitutionalMemoryService
+                         │
+                         ▼
+             HistoricalAnalyticsService
+             (Pure SQL Math in PostgreSQL)
+                         │
+                         ▼
+                   Structured DTO
+  { metric: "concrete", rate: 35.0, unit: "m3/day", sample_size: 1,
+    status: "INSUFFICIENT_SAMPLE", evidence_count: 1 }
+                         │
+                         ▼
+          Time Agent Conversational Explanation
+  "Our historical concrete pouring rate in this project is 35.0 m³/day,
+   based on 1 verified record (Foundation F-204).
+   Note: Sample size is currently sparse (N=1), so this is an observed
+   rate rather than a dependable baseline."
+                         │
+                         ▼
+             Interactive Evidence Link
+```
+
+---
+
+## 23. FRONTEND COCKPIT & USER EXPERIENCE
+
+The Next.js 14 frontend provides a unified, 7-tab project controls workspace (`frontend/app/projects/[id]/page.tsx`):
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                SCHEDULEMANAGER COCKPIT                                 │
+├──────────┬──────────────┬────────────┬─────────┬───────────────┬────────────┬──────────┤
+│ Overview │ WBS Explorer │ Activities │  Gantt  │ Field Reports │ Time Agent │ Inst.Mem │
+└──────────┴──────────────┴────────────┴─────────┴───────────────┴────────────┴──────────┘
+```
+
+### Tab Descriptions
+1. **Overview:** Project-level KPIs, overall percent complete, activity status breakdowns.
+2. **WBS Explorer:** Hierarchical tree view of Work Breakdown Structure nodes with nested activity counts.
+3. **Activities:** Filterable, sortable tabular view of all CPM activities with planned/actual dates and progress.
+4. **Gantt:** Interactive CPM timeline (DHTMLX Gantt / SVG) with dependency logic links and progress fill.
+5. **Field Reports:** Artifact upload dropzone (PDF, Excel, Audio), SHA-256 integrity cards, and Lead Planner Review Cockpit.
+6. **Time Agent:** Conversational chat interface with project-scoped chat history, dynamic clarification cards, staged proposals, and audio recording.
+7. **Institutional Memory:** Dedicated 5-subview analytics workspace:
+   * **Overview & Insights:** Executive KPIs, total verified volume by unit, average duration variance.
+   * **Observed Productivity:** Tabular breakdown of production rates grouped by discipline and unit.
+   * **Planned vs. Actual:** Duration variance table for completed activities with visual overrun indicators.
+   * **Execution Memory Ledger:** Filterable historical execution records with Evidence Drawer triggers and CSV export.
+   * **Historical Query:** Interactive query console with natural language explanations and grounded citations.
+
+---
+
+## 24. VERIFIED REST API REFERENCE
+
+All endpoints verified active in current FastAPI backend:
+
+### Institutional Memory Endpoints (`backend/app/api/analytics.py`)
+* `GET /api/v1/projects/{id}/institutional-memory/summary`: Executive KPIs and aggregate historical metrics.
+* `GET /api/v1/projects/{id}/institutional-memory/ledger`: Paginated, filterable historical execution ledger.
+* `GET /api/v1/projects/{id}/institutional-memory/productivity`: Observed production rates grouped by unit.
+* `GET /api/v1/projects/{id}/institutional-memory/durations`: Planned vs. actual durations and variances for completed tasks.
+* `GET /api/v1/projects/{id}/institutional-memory/benchmarks`: Advisory planning benchmarks (N $\ge$ 3, P50/P80 N $\ge$ 5).
+* `POST /api/v1/projects/{id}/institutional-memory/query`: Grounded natural language query console.
+* `GET /api/v1/projects/{id}/institutional-memory/ledger/export`: RFC 4180 CSV export of historical ledger.
+
+### Time Agent Endpoints (`backend/app/api/agent.py`)
+* `POST /api/v1/projects/{id}/agent/conversations`: Initializes a new conversation session.
+* `GET /api/v1/projects/{id}/agent/conversations`: Lists all conversations scoped to the project.
+* `GET /api/v1/projects/{id}/agent/conversations/{conv_id}`: Retrieves message history and active proposal state.
+* `POST /api/v1/projects/{id}/agent/conversations/{conv_id}/messages`: Submits user chat turn; returns agent response.
+* `POST /api/v1/projects/{id}/agent/conversations/{conv_id}/attachments`: Uploads field report within chat.
+* `POST /api/v1/projects/{id}/agent/conversations/{conv_id}/confirm`: Atomically confirms and applies a staged proposal.
+
+### Schedule & Artifact Endpoints
+* `POST /projects/import`: Multi-format schedule ingestion (.xer, .xml, .csv, .xlsx).
+* `GET /projects`: Lists all imported projects.
+* `GET /projects/{id}/wbs/tree`: Hierarchical WBS tree.
+* `GET /projects/{id}/activities`: Paginated activity table.
+* `POST /api/v1/projects/{id}/artifacts/upload`: Raw artifact upload to MinIO with SHA-256 recording.
+* `POST /api/v1/matching/evaluate`: Batch candidate matching evaluation.
+* `GET /api/v1/review/queue`: Planner review queue for ambiguous events.
+* `POST /api/v1/review/decisions`: Planner review decision recording.
+* `GET /api/v1/projects/{id}/audit-trail`: Comprehensive change history from `ScheduleAuditLog`.
+* `GET /api/v1/projects/{id}/export/xer`: Native Oracle Primavera P6 XER export.
+
+---
+
+## 25. AI ARCHITECTURE, LLM ROLES & CREDENTIAL ISOLATION
+
+### Provider & Model Specifications
+* **AI Provider:** Google Gemini API.
+* **Time Agent Model (`TIME_AGENT_LLM_MODEL`):** `gemini-2.5-flash` (Optimized for conversational speed, intent parsing, and entity extraction).
+* **Document Extraction Model (`EXTRACTION_LLM_MODEL`):** `gemini-3.5-flash` (Optimized for multi-page tabular reasoning and complex document parsing).
+
+### Hardened Credential Isolation (`CredentialResolver`)
+* `TIME_AGENT_GEMINI_API_KEY`: Isolated key dedicated exclusively to conversational processing.
+* `EXTRACTION_GEMINI_API_KEY`: Isolated key dedicated exclusively to document extraction.
+* **Production Firewall:** In production (`ENVIRONMENT=production`), fallback to shared legacy keys is blocked unless explicitly overridden.
+* **Zero Secret Leakage:** Keys are passed via internal HTTP headers (`x-goog-api-key`) and never exposed in client bundles or log files.
+
+---
+
+## 26. TECHNOLOGY STACK & VERIFIED VERSIONS
+
+| Component | Technology | Version | Purpose in ScheduleManager |
+| :--- | :--- | :--- | :--- |
+| **Frontend Framework** | Next.js | 14.1.0 | React web application hosting project controls cockpit. |
+| **UI Language** | TypeScript | 5.3.3 | Strongly typed interfaces, API contracts, and components. |
+| **Styling** | Tailwind CSS | 3.4.1 | Project controls design system and responsive layouts. |
+| **Gantt Visualization** | DHTMLX Gantt / SVG | Latest | Interactive CPM timeline with dependency links. |
+| **Backend Framework** | FastAPI | 0.110.0 | High-performance asynchronous REST API gateway. |
+| **Backend Language** | Python | 3.12 | Core services, deterministic math, and AI orchestration. |
+| **ORM & Database Client** | SQLAlchemy | 2.0.28 | Object-relational mapping, unit of work, and transactions. |
+| **Relational Database** | PostgreSQL | 16-alpine | Authoritative store for schedules, events, ledgers, and audit logs. |
+| **Object Store** | MinIO | Latest | S3-compatible object storage for field artifacts with SHA-256. |
+| **AI / LLM Gateway** | Google Gemini | 2.5-flash / 3.5-flash | Language understanding, entity extraction, conversational dialogue. |
+| **Schedule Parser** | document-parser | Custom FastAPI | Multi-format schedule ingestion (.xer, .xml, .csv, .xlsx). |
+| **PDF Extraction** | PyPDF | Latest | Document parsing and page text extraction. |
+| **Spreadsheet Engine** | openpyxl / csv | Latest | Tabular cutting list and progress log parsing. |
+| **Test Runner** | Pytest | 9.1.1 | Automated regression, unit, and integration test suite. |
+
+---
+
+## 27. CONTAINER TOPOLOGY & INFRASTRUCTURE
+
+The system is deployed via Docker Compose across **5 containerized services**:
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        DOCKER COMPOSE TOPOLOGY                         │
+├────────────────────┬──────────────────┬────────────────────────────────┤
+│ Container Name     │ Port Mapping     │ Core Function                  │
+├────────────────────┼──────────────────┼────────────────────────────────┤
+│ primavera-postgres │ 5432:5432        │ PostgreSQL 16 database         │
+│ primavera-minio    │ 9000:9000 (API)  │ S3-compatible artifact store   │
+│                    │ 9001:9001 (Web)  │ MinIO administrative console   │
+│ primavera-parser   │ 8001:8001        │ Schedule document parser API   │
+│ primavera-backend  │ 8080:8000        │ FastAPI backend & API gateway  │
+│ primavera-frontend │ 3000:3000        │ Next.js project controls UI    │
+└────────────────────┴──────────────────┴────────────────────────────────┘
+```
+
+---
+
+## 28. AUTOMATED TESTING & VERIFICATION (74 PASSED TESTS)
+
+The entire codebase is verified by an automated Pytest test suite totaling **74 passed tests**:
+
+```text
+============================== TEST SUITE SUMMARY ==============================
+Backend Regression Suite        : 65 passed, 0 failed (in 23.14s)
+Document Parser Suite           :  9 passed, 0 failed (in 2.14s)
+--------------------------------------------------------------------------------
+TOTAL ACROSS PLATFORM           : 74 PASSED, 0 FAILED (100% Pass Rate)
+================================================================================
+```
+
+### Test Coverage Breakdown
+1. **Institutional Memory Suite (`tests/test_institutional_memory.py` - 14 Tests):**
+   * Verifies historical ledger retrieval and project isolation.
+   * Verifies multi-day observed production rate math ($\sum Q / \text{days}$).
+   * Verifies strict isolation of incompatible engineering units ($m^3$ vs. $m$ vs. $t$).
+   * Verifies planned vs. actual duration variance and exclusion of incomplete tasks.
+   * Verifies advisory planning benchmarks ($N \ge 3$) and P50/P80 calculations ($N \ge 5$).
+   * Verifies sparse data handling (`NO_HISTORICAL_BENCHMARK`, `INSUFFICIENT_SAMPLE`).
+   * Verifies Time Agent historical query tool execution and grounded citations.
+   * Verifies RFC 4180 CSV export generation.
+2. **Time Agent Suite (`tests/test_time_agent.py` - 16 Tests):**
+   * Verifies dynamic clarification dialogs and candidate option formatting.
+   * Verifies proposal staging, 5-minute TTL expiration, and row-level locking.
+   * Verifies stale proposal conflict detection (`HTTP 409`).
+   * Verifies project-scoped chat navigation and message persistence.
+   * Verifies governed bulk intent scope resolution and preview staging.
+3. **Extraction & Matching Integration (`tests/test_extraction_matching_integration.py` - 10 Tests):**
+   * Verifies MinIO SHA-256 artifact storage, 5-signal matching scores, and confidence routing.
+4. **Credential Isolation (`tests/test_credential_resolver.py` - 9 Tests):**
+   * Verifies independent API keys and production safety blocks.
+5. **Schedule Ingestion & Export (`tests/test_xer_export_roundtrip.py`, `test_import_e2e.py` - 4 Tests):**
+   * Verifies multi-table XER parsing, canonical JSON normalization, and roundtrip XER export.
+6. **Domain APIs & Validation (12 Tests):**
+   * Verifies activity CRUD, WBS tree assembly, logic relationship validation, and percent complete bounds.
+7. **Document Parser Subsystem (9 Tests):**
+   * Verifies standalone schedule parsing across XER, XML, CSV, and XLSX formats.
+
+---
+
+## 29. BENCHMARK DEMONSTRATION: BOROUGE 4 PETROCHEMICAL EXPANSION
+
+The verified 12-step demonstration scenario (`BOROUGE4_DEMO`):
+
+```text
+STEP 1: BASELINE SCHEDULE IMPORT
+- Project: BOROUGE4_DEMO (Data Date: 2024-06-01)
+- Activity 1: CIV-1001 (Foundation Pour F-204, Planned: 140 m3, Status: NOT_STARTED, 0%)
+- Activity 2: CIV-1002 (Foundation Pour F-205, Planned: 120 m3, Status: NOT_STARTED, 0%)
+
+STEP 2: SUPERVISOR FIELD REPORT
+- Supervisor enters chat: "We poured 35 cubic meters of concrete today."
+
+STEP 3: TIME AGENT INTENT PARSING
+- ConversationalParser classifies PROGRESS_REPORT; extracts qty=35, unit=m3, date=2024-06-01.
+
+STEP 4: 5-SIGNAL CANDIDATE MATCHING
+- Matcher retrieves CIV-1001 and CIV-1002. Scores are tied (Delta < 0.15).
+
+STEP 5: DYNAMIC CLARIFICATION DIALOG
+- Agent prompts: "Which foundation was poured today: F-204 or F-205?" (Renders ActionCard).
+
+STEP 6: SUPERVISOR SELECTION
+- Supervisor clicks "F-204". Agent enriches same ExecutionEvent with location="F-204".
+- Re-scoring: CIV-1001 scores S_total = 0.95 (AUTO_LINK).
+
+STEP 7: PROPOSAL STAGING
+- Agent stages UpdateProposal: CIV-1001, +35 m3, 0.0% -> 25.0%, TTL: 5 minutes.
+- CPM Baseline Firewall verified: Authoritative schedule remains 0.0% until confirmation.
+
+STEP 8: GOVERNED CONFIRMATION & COMMIT
+- Supervisor clicks [Confirm & Apply].
+- ScheduleUpdateService executes row-locked transaction:
+  * CIV-1001 percent_complete = 25.0%, status = IN_PROGRESS, actual_start = 2024-06-01.
+  * ActualProgressLedger entry written (35.0 m3, cumulative 25.0%).
+  * ScheduleAuditLog records full state diff JSON.
+  * DomainOutbox emits SCHEDULE_PROGRESS_UPDATED event.
+
+STEP 9: VERIFIED EXECUTION BECOMES INSTITUTIONAL MEMORY
+- Verified progress is immediately queryable in the Institutional Memory workspace.
+
+STEP 10: HISTORICAL QUERY IN CHAT
+- Planner asks: "What was our observed concrete pouring rate?"
+
+STEP 11: DETERMINISTIC HISTORICAL CALCULATION
+- System computes: SUM(35) / 1 reporting day = 35.0 m3/day.
+- Flags sample status: INSUFFICIENT_SAMPLE (N=1 < 3).
+
+STEP 12: EVIDENCE LINEAGE & FUTURE PLANNING
+- Time Agent explains rate with citations. Planner opens Evidence Drawer, verifies verbatim excerpt,
+  and uses observed rate as planning context for upcoming foundations.
+```
+
+---
+
+## 30. PRODUCT DIFFERENTIATION: "NOT JUST A RAG CHATBOT"
+
+```text
+GENERIC CONSTRUCTION RAG CHATBOT             SCHEDULEMANAGER PLATFORM
+┌───────────────────────────────┐            ┌─────────────────────────────────────────┐
+│ User: "How much did we pour?" │            │ User: "Poured 35 m3 concrete today"     │
+│              │                │            │                   │                     │
+│              ▼                │            │                   ▼                     │
+│ Vector Search over PDFs       │            │ Canonical ExecutionEvent Normalized     │
+│              │                │            │                   │                     │
+│              ▼                │            │                   ▼                     │
+│ LLM Generates Text Summary    │            │ Deterministic 5-Signal Candidate Match  │
+│              │                │            │                   │                     │
+│              ▼                │            │                   ▼                     │
+│ Text Answer on Screen         │            │ Governed Human Confirmation Guardrail   │
+│ (No schedule update,          │            │                   │                     │
+│  no audit trail,              │            │                   ▼                     │
+│  no baseline protection)      │            │ CPM Baseline Firewall Schedule Commit   │
+│                               │            │                   │                     │
+│                               │            │                   ▼                     │
+│                               │            │ Append-Only Ledger & SHA-256 Audit Trail│
+│                               │            │                   │                     │
+│                               │            │                   ▼                     │
+│                               │            │ Institutional Memory Analytics (Postgres)│
+│                               │            │                   │                     │
+│                               │            │                   ▼                     │
+│                               │            │ Evidence-Backed Future Planning Context │
+└───────────────────────────────┘            └─────────────────────────────────────────┘
+```
+
+### Core Engineering Differentiators
+1. **Schedule-Aware Execution:** Operates over explicit CPM schedule graphs, WBS trees, and contractual logic networks.
+2. **Deterministic Matching Engine:** Candidate resolution is governed by mathematical formulas and confidence gates, not unconstrained LLM guessing.
+3. **The CPM Baseline Firewall:** Contractual planned start/finish dates and logic relationships are shielded from field edits.
+4. **Append-Only Idempotent Progress Ledger:** Composite uniqueness `(activity_id, execution_event_id)` ensures duplicate reports cannot corrupt actuals.
+5. **Implemented Institutional Memory V1:** Converts verified execution records into deterministic production rates, duration variances, and advisory benchmarks without hallucination.
+6. **Forensic Evidence Lineage:** Every metric and percentage connects directly to underlying document bytes (SHA-256) or supervisor chat transcripts.
+
+---
+
+## 31. IMPLEMENTED V1 SCOPE VS. DEFERRED ROADMAP
+
+| Capability | Status in Current Codebase | Technical Notes |
+| :--- | :---: | :--- |
+| **Primavera P6 Import (.xer, .xml, .csv, .xlsx)** | **IMPLEMENTED** | Normalized into canonical PostgreSQL schedule schema. |
+| **Relational Data Model (13 Entities)** | **IMPLEMENTED** | Complete SQLAlchemy domain models in PostgreSQL 16. |
+| **MinIO Artifact Storage & SHA-256 Hashing** | **IMPLEMENTED** | S3-compatible storage with SHA-256 deduplication and presigned URLs. |
+| **5-Signal Candidate Matching Engine** | **IMPLEMENTED** | Exact code, text, WBS, temporal, and context signals with confidence gating. |
+| **Time Agent Conversational Interface** | **IMPLEMENTED** | Intent classification, entity extraction, action cards, and drawer UX. |
+| **Dynamic Multi-Choice Clarification** | **IMPLEMENTED** | Pairwise A/B for 2 candidates, structured candidate list for 3–4 candidates. |
+| **Governed Bulk Progress Intent** | **IMPLEMENTED** | Authoritative SQL scope resolution, preview card, and atomic completion. |
+| **Project-Scoped Chat History** | **IMPLEMENTED** | Persistent multi-chat navigation scoped strictly to `project_id`. |
+| **CPM Baseline Protection Firewall** | **IMPLEMENTED** | Planned dates and logic links shielded; actuals updated safely. |
+| **UpdateProposal Staging & Row-Locking** | **IMPLEMENTED** | 5-minute TTL, baseline snapshots, concurrency locking (`SELECT FOR UPDATE`). |
+| **Append-Only Progress Ledger & Audit Log** | **IMPLEMENTED** | Idempotent ledger with state diffs in `ScheduleAuditLog`. |
+| **P6 Roundtrip XER Export** | **IMPLEMENTED** | Native P6 XER export for core tables (`PROJECT`, `PROJWBS`, `TASK`, `TASKPRED`). |
+| **Institutional Memory V1 Engine** | **IMPLEMENTED** | Observed rates, duration variances, benchmarks, and CSV export. |
+| **Time Agent Historical Query Tool** | **IMPLEMENTED** | Deterministic SQL math explained conversationally with citations. |
+| **Automated Test Suite** | **IMPLEMENTED** | 74 automated tests passing (65 backend + 9 parser). |
+| **Automated Speech-to-Text (STT)** | **DEFERRED (V1.1)** | Voice memos stored in MinIO with SHA-256; automated transcription in V1.1. |
+| **Vector Database / Semantic Memory (Qdrant)** | **DEFERRED (V2.0)** | V1 Institutional Memory uses PostgreSQL; vector search is future scope. |
+| **Cross-Project Organizational Benchmarking** | **DEFERRED (V1.1)** | Current V1 analytics are project-scoped; enterprise pooling in V1.1. |
+| **Production Enterprise SSO / OAuth2 / JWT** | **DEFERRED (V1.1)** | V1 uses trusted caller identity headers (`X-User-ID`). |
+| **Autonomous CPM Rescheduling** | **OUT OF SCOPE** | Forward/backward CPM passes remain within Primavera P6. |
+| **Automated Schedule Revert / Rollback** | **OUT OF SCOPE** | Revert feature was discussed conceptually but is not implemented. |
+
+---
+
+## 32. SAFE PRESENTATION CLAIMS VS. CLAIMS NOT TO MAKE
+
+| Topic | Claims SAFE to Make (RECOMMENDED) | Claims NOT to Make (STRICTLY AVOID) |
+| :--- | :--- | :--- |
+| **AI Role** | *"Gemini handles language parsing and explains data; deterministic backend services execute scoring, math, and mutations."* | *"AI autonomously manages and updates the schedule."* |
+| **Matching** | *"Multi-signal matching routes high-confidence matches and routes ambiguous cases to clarification or planner review."* | *"Our AI matching is 100% accurate with zero false links."* |
+| **Schedule Safety** | *"Schedule updates are constrained by a CPM baseline protection layer shielding planned dates and logic links."* | *"Guaranteed zero-risk schedule automation."* |
+| **Institutional Memory** | *"V1 Institutional Memory computes deterministic observed rates and duration variances from authoritative PostgreSQL records."* | *"V1 features an AI vector memory brain that predicts project delays."* |
+| **Historical Data** | *"The system requires N $\ge$ 3 for benchmarks and transparently reports INSUFFICIENT_DATA when history is sparse."* | *"AI guarantees accurate duration predictions for all future tasks."* |
+| **Evidence Lineage** | *"Applied updates retain source provenance linking to document bytes (SHA-256) or chat transcripts."* | *"100% unalterable blockchain forensic proof."* |
+| **Voice Ingestion** | *"Audio memos are securely stored in MinIO with cryptographic hashes; transcription is slated for V1.1."* | *"Real-time speech-to-text voice recognition is live."* |
+| **P6 Compatibility** | *"Roundtrip-tested for supported core XER tables: PROJECT, PROJWBS, TASK, and TASKPRED."* | *"Full 100% feature parity with Oracle Primavera P6 Enterprise."* |
+| **Chat Scope** | *"Conversations are project-scoped; separate chats do not leak active events or proposals."* | *"The AI maintains global organizational memory across all projects."* |
+| **Testing** | *"Hardened by 74 automated tests covering concurrency, math, credential isolation, and memory."* | *"The software is certified bug-free and production-ready."* |
+
+---
+
+## 33. SLIDE-BY-SLIDE PPT PRESENTATION BLUEPRINT
+
+A structured 14-slide guide for presentation deck creation:
+
+### Slide 1: Title & Vision
+* **Title:** ScheduleManager: AI-Assisted Primavera P6 Schedule Management Platform
+* **Subtitle:** Governed Field-Progress Ingestion, Multi-Signal Activity Matching & Institutional Memory
+* **Key Message:** Bridging the gap between planned CPM schedules and physical site execution with auditable AI governance.
+* **Visual:** Split graphic showing an industrial construction site (Level 6) and a Primavera P6 Gantt timeline (Level 3/4).
+* **Technical Fact:** Built for Smart India Hackathon Problem Statement PS26122.
+
+### Slide 2: The Industrial Challenge (SIH26122)
+* **Title:** The Planning-to-Execution Gap in Capital Construction
+* **Key Message:** Schedules become stale because reconciling informal field reports with contractual P6 tasks is slow, manual, and error-prone.
+* **Bullet Points:**
+  * Multi-week reporting lag between site accomplishment and master schedule updates.
+  * Vocabulary mismatch: Supervisors report *"F-204 concrete pour"*; P6 tracks `CIV-1001`.
+  * Manual transcription severed from source evidence, complicating contractor delay claims.
+  * Historical execution data is permanently lost upon project handover.
+* **Visual:** Flow diagram showing broken manual workflow (Paper/PDF $\rightarrow$ Email $\rightarrow$ Manual P6 Typing $\rightarrow$ Stale Baselines).
+
+### Slide 3: The ScheduleManager Solution
+* **Title:** The Closed-Loop Planning-to-Execution Architecture
+* **Key Message:** A governed pipeline connecting site reality to master schedules, turning verified execution into institutional planning intelligence.
+* **Bullet Points:**
+  * Dual-modality ingestion: Documents (PDF, Excel, Audio) + Conversational Time Agent.
+  * Deterministic 5-signal matching engine with confidence-based routing.
+  * CPM Baseline Firewall protecting planned contractual milestones.
+  * Institutional Memory Engine transforming verified actuals into reusable benchmarks.
+* **Visual:** High-level conceptual loop (`PLAN -> EXECUTE -> MATCH -> GOVERN -> UPDATE -> AUDIT -> INSTITUTIONAL MEMORY -> PLAN BETTER`).
+
+### Slide 4: System Architecture & Container Topology
+* **Title:** Engineered for Enterprise Governance & Reliability
+* **Key Message:** Strict layer separation prevents unverified AI outputs from touching master schedule data.
+* **Bullet Points:**
+  * Next.js 14 frontend cockpit + FastAPI asynchronous backend gateway.
+  * PostgreSQL 16 authoritative relational store + MinIO S3 artifact storage (SHA-256).
+  * Independent `document-parser` microservice for P6 XER, XML, CSV, and XLSX.
+  * Hardened credential isolation separating Time Agent and Extraction LLM keys.
+* **Visual:** Container architecture diagram showing ports 3000, 8080, 8001, 5432, 9000/9001.
+
+### Slide 5: Deterministic 5-Signal Activity Matching
+* **Title:** Multi-Signal Candidate Resolution Engine
+* **Key Message:** Entity resolution over schedule graphs using transparent mathematical scoring rather than unconstrained LLM guessing.
+* **Bullet Points:**
+  * Signals: Exact Code ($S_{\text{id}}$), Text Similarity ($S_{\text{text}}$), WBS Hierarchy ($S_{\text{wbs}}$), Temporal Window ($S_{\text{temp}}$), Context ($S_{\text{context}}$).
+  * Exact activity code guarantees $S_{\text{total}} \ge 0.95$.
+  * Confidence Gates: `AUTO_LINK` ($\ge 0.85$, $\Delta \ge 0.15$), `IN_REVIEW` ($\ge 0.50$), `UNMATCHED` ($< 0.50$).
+  * Non-finalizing evaluation (`evaluate_event_for_agent`) enables safe conversational dialog.
+* **Visual:** 5-signal formula box and confidence threshold routing diagram.
+
+### Slide 6: Time Agent: Conversational Site Assistant
+* **Title:** Conversational Progress Ingestion & Dynamic Clarification
+* **Key Message:** Supervisors report in natural language; the agent clarifies ambiguity through structured multi-choice options.
+* **Bullet Points:**
+  * Supports 6 intents: Progress reports, queries, updates, clarifications, artifacts, bulk scope.
+  * Dynamic Clarification: Pairwise A/B for 2 candidates; ranked list for 3–4 candidates + "None of these".
+  * Clarification enriches the same `ExecutionEvent` (max 3 turns before planner escalation).
+  * Project-scoped chat navigation with persistent session history (no global memory leakage).
+* **Visual:** UI screenshot of `TimeAgentChat.tsx` displaying clarification option buttons.
+
+### Slide 7: Governed Bulk Progress Intent
+* **Title:** Trade-Level Progress Reporting with Authoritative Scope Control
+* **Key Message:** Natural language bulk intent is resolved authoritatively by PostgreSQL, previewed safely, and committed atomically.
+* **Bullet Points:**
+  * Supervisor reports: *"We completed all electrical activities in Substation B"*.
+  * LLM extracts scope intent; PostgreSQL authoritatively resolves matching activity IDs.
+  * Bulk Proposal Card renders full preview of affected activities and proposed status.
+  * Atomic transaction execution across `ScheduleUpdateService` upon human confirmation.
+  * Strict safety boundary: Scope completion is supported; blind quantity distribution is rejected.
+* **Visual:** Sequence flow: Natural Language $\rightarrow$ SQL Scope Lookup $\rightarrow$ Preview Card $\rightarrow$ Confirmation $\rightarrow$ Atomic Commit.
+
+### Slide 8: Schedule Update Governance & The CPM Firewall
+* **Title:** Protecting Contractual Baselines & Concurrency Safety
+* **Key Message:** Field updates can alter progress actuals, but cannot corrupt planned baseline dates or network logic.
+* **Bullet Points:**
+  * CPM Firewall: `percent_complete` and `actual_start/finish` are mutable; planned dates and links are immutable.
+  * UpdateProposal guardrail: 5-minute TTL, baseline snapshot, conflict detection (`HTTP 409`).
+  * Row-level locking (`SELECT FOR UPDATE`) prevents concurrent double-commits.
+  * Monotonic progress clamping ($0.0 \le \% \le 100.0$); negative progress deltas rejected.
+* **Visual:** CPM Firewall table (Mutable Actuals vs. Immutable Contract Baselines).
+
+### Slide 9: Append-Only Progress Ledger & Forensic Audit Trail
+* **Title:** Complete Contemporaneous Provenance for Dispute Defense
+* **Key Message:** Every applied progress update produces an unbreakable audit record linking schedule actuals to raw evidence.
+* **Bullet Points:**
+  * `ActualProgressLedger`: Idempotent progress records via unique key `(activity_id, execution_event_id)`.
+  * `ScheduleAuditLog`: Full before-and-after JSON state diffs recorded with user IDs and timestamps.
+  * `DomainOutbox`: Transactional event emission for enterprise synchronization.
+  * Native roundtrip Oracle Primavera P6 XER export preserving verified actuals for core tables.
+* **Visual:** Graphic linking Schedule Percentage $\rightarrow$ Ledger Row $\rightarrow$ Execution Event $\rightarrow$ MinIO SHA-256 PDF.
+
+### Slide 10: Institutional Memory V1: Learning from History
+* **Title:** Every Verified Execution Event Becomes Future Project Intelligence
+* **Key Message:** Institutional Memory V1 is fully implemented, turning PostgreSQL actuals into deterministic planning intelligence.
+* **Bullet Points:**
+  * Computed directly from authoritative relational records—no separate memory tables or vector stores.
+  * Observed Production Rate: $\sum Q / \text{reporting days}$, with strict isolation of engineering units ($m^3, m, t$).
+  * Planned vs. Actual duration variance calculated for completed tasks ($A - P$).
+  * Sparse Data Governance: Requires $N \ge 3$ for benchmarks and $N \ge 5$ for P50/P80 percentiles; transparently reports `INSUFFICIENT_DATA`.
+* **Visual:** Institutional Memory architecture diagram (`Verified Actuals -> Deterministic SQL -> DTO -> UI / Chat`).
+
+### Slide 11: Grounded Historical Query & Evidence Drawer
+* **Title:** Natural Language Historical Queries with Verbatim Lineage
+* **Key Message:** Planners query historical performance conversationally; the system computes math in SQL and provides clickable evidence.
+* **Bullet Points:**
+  * Planner asks: *"What was our historical concrete pouring rate?"*
+  * Time Agent calls `query_historical_performance()`; deterministic SQL computes the exact rate.
+  * Agent delivers a grounded explanation citing sample sizes and sample-quality flags.
+  * Interactive Evidence Drawer displays Event ID, Ledger ID, dates, quantities, and verbatim excerpts.
+  * Standard RFC 4180 CSV export for downstream enterprise analytics.
+* **Visual:** Screenshot of Institutional Memory Workspace showing the KPI cards and the Evidence Drawer.
+
+### Slide 12: Benchmark Demonstration: Borouge 4
+* **Title:** End-to-End Verification on Industrial Petrochemical Benchmark
+* **Key Message:** Proving the closed-loop pipeline on the Borouge 4 Expansion Project.
+* **Bullet Points:**
+  * Schedule Ingest: P6 schedule with Foundation Pour tasks CIV-1001 ($140\text{ m}^3$) and CIV-1002 ($120\text{ m}^3$).
+  * Supervisor reports: *"Poured 35 m3 concrete today"*; Agent prompts A/B clarification ("F-204 or F-205?").
+  * Supervisor selects "F-204"; staged proposal generated ($+35\text{ m}^3$, $0\% \rightarrow 25\%$).
+  * Confirmed and applied: Progress ledger, audit log, and outbox emitted.
+  * Instantly queryable in Institutional Memory; rate verified as $35.0\text{ m}^3/\text{day}$ ($N=1$).
+* **Visual:** Step-by-step transcript and screenshots from `BOROUGE4_DEMO`.
+
+### Slide 13: Software Quality & Automated Verification
+* **Title:** Rigorous Engineering & Test Verification
+* **Key Message:** Verified by a comprehensive regression suite of 74 automated tests across all platform tiers.
+* **Bullet Points:**
+  * 65 Backend Tests Passed (100% pass rate in 23.14s) + 9 Document Parser Tests Passed.
+  * 14 Institutional Memory tests verifying rate math, unit isolation, duration variance, and sparse data gates.
+  * 16 Time Agent tests verifying clarification dialogs, proposal locking, and chat history.
+  * Hardened credential isolation: Zero secret leakage, independent keys, production fallback blocks.
+* **Visual:** Terminal screenshot of Pytest execution showing `74 passed, 0 failed`.
+
+### Slide 14: Value Proposition & Strategic Summary
+* **Title:** Why ScheduleManager Wins
+* **Key Message:** Not another chatbot—a governed, auditable, and learning bridge between site reality and project schedules.
+* **Bullet Points:**
+  * **Eliminates Reporting Lag:** Shifts progress capture from multi-week delays toward near-real-time ingestion.
+  * **Protects Contractual Baselines:** CPM Firewall shields contractual milestone dates and logic networks.
+  * **Forensic Auditability:** Contemporaneous evidence retention for dispute avoidance and claims defense.
+  * **Institutional Memory:** Transforms completed projects into queryable, evidence-backed planning intelligence.
+* **Closing Line:** *"ScheduleManager ensures master schedules reflect site reality today, while building the knowledge required to plan better tomorrow."*
+
+---
+
+## 34. PRESENTATION-SAFE TERMINOLOGY GLOSSARY
+
+* **`ExecutionEvent`:** A normalized, canonical domain record representing physical work performed on site on a specific date, derived from a document upload or conversational utterance.
+* **`Time Agent`:** The conversational AI assistant within ScheduleManager that interacts with supervisors to collect, clarify, and stage progress updates.
+* **`UpdateProposal`:** A temporary, staged schedule update containing baseline snapshots and delta calculations awaiting explicit human confirmation (5-minute TTL).
+* **`CPM Baseline Firewall`:** The strict architectural boundary ensuring field updates mutate *only* actual progress fields, shielding planned start/finish dates, durations, and logic links.
+* **`Deterministic Matching`:** Mathematical candidate resolution evaluating exact codes, text similarity, WBS hierarchy, temporal windows, and physical context without LLM guessing.
+* **`Margin Delta ($\Delta$)`:** The score separation between the top-ranked candidate activity and the runner-up, measuring match certainty.
+* **`ActualProgressLedger`:** The append-only relational ledger recording every verified progress increment credited to an activity by application design.
+* **`Institutional Memory`:** The structured historical execution intelligence engine that turns verified PostgreSQL actuals into observed productivity rates, duration variances, and planning benchmarks.
+* **`Observed Production Rate`:** $\sum \text{installed\_quantity} / \text{distinct reporting days}$, calculated deterministically with strict engineering unit isolation.
+* **`Sparse Data Governance`:** Architectural rules requiring $N \ge 3$ for benchmarks and $N \ge 5$ for percentiles, transparently reporting `INSUFFICIENT_DATA` when evidence is limited.
+* **`Domain Outbox`:** A transactional outbox table (`domain_outbox`) ensuring reliable event streaming to external PMIS systems upon schedule mutation.
+
+---
+
+## 35. FINAL PRESENTATION CHECKLIST & DELIVERY NOTES
+
+### Presentation Strengths to Highlight
+1. **The Closed-Loop Story:** `PLAN -> EXECUTE -> MATCH -> GOVERN -> UPDATE -> AUDIT -> INSTITUTIONAL MEMORY -> PLAN BETTER`. Emphasize that the system completes the entire lifecycle.
+2. **Deterministic Governance:** Judges love knowing the LLM does not execute SQL, does not calculate progress percentages, and cannot overwrite CPM baselines.
+3. **Institutional Memory is Live:** Highlight that Institutional Memory V1 is working in code, computing observed rates and duration variances from PostgreSQL with transparent sample-size warnings.
+4. **Interactive Evidence Drawer:** Demonstrate clicking a historical metric and tracing it back to the exact verbatim sentence from the field log.
+
+### Traps to Avoid During Q&A
+* **Do NOT claim AI reschedules the project:** Explain that forward/backward CPM calculation remains inside Primavera P6; ScheduleManager updates actual progress safely.
+* **Do NOT claim 100% automated matching:** State that high-confidence events auto-link ($\ge 0.85, \Delta \ge 0.15$), while ambiguous events are safely routed to clarification or the Lead Planner Review Cockpit.
+* **Do NOT claim vector database memory:** State that V1 uses structured PostgreSQL relational analytics; semantic vector retrieval is a planned V2.0 enhancement.
+* **Do NOT claim live speech-to-text:** State that audio memos are stored with SHA-256 hashes in MinIO as contemporaneous evidence, with automated transcription scheduled for V1.1.
+* **Do NOT claim an automated rollback feature:** Revert/rollback was discussed conceptually but is not an implemented feature in the current codebase.
